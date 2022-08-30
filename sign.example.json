@@ -1,0 +1,15 @@
+{
+  "popup": true,
+  "duplicated_sign": false,
+  "discord_webhook_url": "",
+  "discord_webhook_username": "",
+  "discord_webhook_avatar_url": "",
+  "reuse_discord_msg": false,
+  "show_ltuid": true,
+  "cookies": [
+    "mi18nLang=en-us; ltoken=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; ltuid=123456789;",
+    "mi18nLang=en-us; ltoken=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; ltuid=234567890;"
+  ],
+  "lang": "en-us",
+  "act_id": "e202102251931481"
+}
