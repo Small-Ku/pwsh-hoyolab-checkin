@@ -57,10 +57,6 @@ if ($conf.popup) {
 
 $first_cookie = $true
 foreach ($cookie in $conf.cookies) {
-	if ($conf.popup -and $first_cookie) {
-		$popup_msg += "`n"
-		$first_cookie = $false
-	}
 	$jar = @{}
 	foreach ($c in ($cookie -split ';')) {
 		$c = $c.Trim()
@@ -86,7 +82,7 @@ foreach ($cookie in $conf.cookies) {
 		# Basic check if cookie valid
 		$uid = $Matches.1
 		if ($conf.show_ltuid) {
-			$display_uid = "UID: $uid"
+			$display_uid = "LTUID: $uid"
 		}
 		else {
 			$display_uid = 'Hidden'
@@ -98,11 +94,19 @@ foreach ($cookie in $conf.cookies) {
 			$ret_sign = Invoke-RestMethod -Method 'Post' -Uri ($base_url + $path_api_sign) -Body ($sign_body | ConvertTo-Json) -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
 			if ($ret_sign.retcode -ne -100) {
 				# If server found valid cookie
+				if ($conf.popup -and (($ret_info.data.is_sign -and $conf.duplicated_sign) -or ((-not $ret_info.data.is_sign) -and ($ret_sign.message -eq 'OK')))) {
+					if ($first_cookie) {
+						$first_cookie = $false
+					}
+					else {
+						$popup_msg += "`n"
+					}
+				}
 				if ($ret_info.data.is_sign -and $conf.duplicated_sign) {
 					# If sign is duplicated and need to be shown
 					$msg = Format-Text -Text $ret_sign.message
 					if ($conf.popup) {
-						$popup_msg += "[$display_uid] $msg`n"
+						$popup_msg += "[$display_uid] $msg"
 					}
 					if ($conf.discord_webhook_url) {
 						$discord_embed += @{
