@@ -62,8 +62,43 @@ foreach ($cookie in $conf.cookies) {
 	}
 	$ltuid = $Matches.1
 	
+	# Cookies setup
+	$jar = @{}
+	foreach ($c in ($cookie -split ';')) {
+		$c = $c.Trim()
+		if ($c) {
+			$c_pair = $c -split '=', 2
+			$jar[$c_pair[0]] = $c_pair[1]
+		}
+	}
+	
+	# Get account info
+	$session = New-WebSession -Cookies $jar -For "https://api-account-os.hoyolab.com"
+	$headers = @{
+		'sec-ch-ua'        = '" Not A;Brand";v="99", "Chromium";v="90", "Google Chrome";v="90"'
+		'Accept'           = 'application/json, text/plain, */*'
+		'sec-ch-ua-mobile' = '?0'
+		'Origin'           = 'https://act.hoyolab.com'
+		'Sec-Fetch-Site'   = 'same-site'
+		'Sec-Fetch-Mode'   = 'cors'
+		'Sec-Fetch-Dest'   = 'empty'
+		'Referer'          = 'https://act.hoyolab.com'
+		'Accept-Language'  = 'en-US,en;q=0.9'
+	}
+	$ret_ac_info = Invoke-RestMethod -Method 'Get' -Uri 'https://api-account-os.hoyolab.com/auth/api/getUserAccountInfoByLToken' -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
+	if ($debugging) {
+		Write-Host
+		Write-Host 'Account info:' $ret_ac_info 'data:' $ret_ac_info.data
+	}
+	if ($ret_ac_info.retcode -eq -0) {
+		$display_name = "$($ret_ac_info.data.account_name)($($ret_ac_info.data.account_id))"
+	}else{
+		$display_name = $ltuid
+	}
+	
 	foreach ($game in $conf.games) {
 		if ($debugging) {
+			Write-Host
 			Write-Host 'Signing for:' $game
 		}
 		# URL setup
@@ -73,15 +108,7 @@ foreach ($cookie in $conf.cookies) {
 		$api_info_url = "$base_url/event/$($game.game_id)/info?lang=$lang&act_id=$act_id"
 		$api_sign_url = "$base_url/event/$($game.game_id)/sign?lang=$lang"
 
-		# Web Session / Cookies setup
-		$jar = @{}
-		foreach ($c in ($cookie -split ';')) {
-			$c = $c.Trim()
-			if ($c) {
-				$c_pair = $c -split '=', 2
-				$jar[$c_pair[0]] = $c_pair[1]
-			}
-		}
+		# Web Session setup
 		$session = New-WebSession -Cookies $jar -For $base_url
 		$headers = @{
 			'sec-ch-ua'        = '" Not A;Brand";v="99", "Chromium";v="90", "Google Chrome";v="90"'
@@ -101,12 +128,12 @@ foreach ($cookie in $conf.cookies) {
 			Write-Host 'Queried info:' $ret_info 'data:' $ret_info.data
 		}
 		if ($ret_info.retcode -eq -100) {
-				Write-Host "Invalid cookie format: $cookie"
+			Write-Host "Invalid cookie: $ltuid ($ret_info)"
 			Continue
 		}
 
 		# Request check-in
-		Write-Host "Checking $ltuid in for $($game.name)"
+		Write-Host "Checking $display_name in for $($game.name)"
 		$sign_body = @{
 			'act_id' = $act_id
 		} | ConvertTo-Json
@@ -115,15 +142,15 @@ foreach ($cookie in $conf.cookies) {
 			Write-Host 'Check-in:' $ret_sign 'data:' $ret_sign.data
 		}
 		if ($ret_sign.retcode -eq -100) {
-				Write-Host "Invalid cookie: $ltuid ($ret_sign)"
+			Write-Host "Invalid cookie: $ltuid ($ret_sign)"
 			Continue
 		}
 
 		# Already checked-in before
 		if ($ret_info.data.is_sign) {
 			$msg = Format-Text -Text $ret_sign.message
-				Write-Host "[$ltuid] $msg"
-			if (-not $debugging)	{ Continue }
+				Write-Host "[$display_name] $msg"
+			if (-not $debugging -and $env:debug -ne 'pwsh-hoyolab-checkin.ignore-signed')	{ Continue }
 		} 
 		# Unknown not checked-in situation
 		elseif ($ret_sign.message -ne 'OK') { # use elseif to avoid skip when debug
@@ -144,7 +171,7 @@ foreach ($cookie in $conf.cookies) {
 		}
 		$current_reward = $ret_reward.data.awards[$ret_info.data.total_sign_day - 1] # Array start from 0
 		$reward_name = Format-Text -Text $current_reward.name
-		Write-Host "[$ltuid] $reward_name x$($current_reward.cnt)"
+		Write-Host "[$display_name] $reward_name x$($current_reward.cnt)"
 	}
 }
 if ($conf.display.console_pause) {
