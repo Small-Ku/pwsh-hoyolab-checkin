@@ -6,6 +6,11 @@
       "username": "",
       "avatar_url": "",
       "reuse_msg": false
+    },
+    "account_info": {
+      "name": true,
+      "email": true,
+      "phone": false
     }
   },
   "cookies": [
