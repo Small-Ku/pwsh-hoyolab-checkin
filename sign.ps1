@@ -57,7 +57,7 @@ if ($conf.notification.discord.webhook_url) {
 foreach ($cookie in $conf.cookies) {
 	# Basic check if cookie valid
 	if (-not(($cookie -match 'ltoken=[0-9a-zA-Z]{40}') -and ($cookie -match 'ltuid=(\d+)'))) {
-			Write-Host "Invalid cookie format: $cookie"
+		Write-Host "Invalid cookie format: $cookie"
 		Continue
 	}
 	$ltuid = $Matches.1
@@ -73,7 +73,7 @@ foreach ($cookie in $conf.cookies) {
 	}
 	
 	# Get account info
-	$session = New-WebSession -Cookies $jar -For "https://api-account-os.hoyolab.com"
+	$session = New-WebSession -Cookies $jar -For 'https://api-account-os.hoyolab.com'
 	$headers = @{
 		'sec-ch-ua'        = '" Not A;Brand";v="99", "Chromium";v="90", "Google Chrome";v="90"'
 		'Accept'           = 'application/json, text/plain, */*'
@@ -92,7 +92,8 @@ foreach ($cookie in $conf.cookies) {
 	}
 	if ($ret_ac_info.retcode -eq -0) {
 		$display_name = "$($ret_ac_info.data.account_name)($($ret_ac_info.data.account_id))"
-	}else{
+	}
+	else {
 		$display_name = $ltuid
 	}
 	
@@ -128,12 +129,16 @@ foreach ($cookie in $conf.cookies) {
 			Write-Host 'Queried info:' $ret_info 'data:' $ret_info.data
 		}
 		if ($ret_info.retcode -eq -100) {
-			Write-Host "Invalid cookie: $ltuid ($ret_info)"
+			if ($conf.display.console -or $debugging) {
+				Write-Host "Invalid cookie: $ltuid ($ret_info)"
+			}
 			Continue
 		}
 
 		# Request check-in
-		Write-Host "Checking $display_name in for $($game.name)"
+		if ($conf.display.console -or $debugging) {
+			Write-Host "Checking $display_name in for $($game.name)"
+		}
 		$sign_body = @{
 			'act_id' = $act_id
 		} | ConvertTo-Json
@@ -142,19 +147,26 @@ foreach ($cookie in $conf.cookies) {
 			Write-Host 'Check-in:' $ret_sign 'data:' $ret_sign.data
 		}
 		if ($ret_sign.retcode -eq -100) {
-			Write-Host "Invalid cookie: $ltuid ($ret_sign)"
+			if ($conf.display.console -or $debugging) {
+				Write-Host "Invalid cookie: $ltuid ($ret_sign)"
+			}
 			Continue
 		}
 
 		# Already checked-in before
 		if ($ret_info.data.is_sign) {
 			$msg = Format-Text -Text $ret_sign.message
+			if ($conf.display.console -or $debugging) {
 				Write-Host "[$display_name] $msg"
+			}
 			if (-not $debugging -and $env:debug -ne 'pwsh-hoyolab-checkin.ignore-signed')	{ Continue }
 		} 
 		# Unknown not checked-in situation
-		elseif ($ret_sign.message -ne 'OK') { # use elseif to avoid skip when debug
-			Write-Host "[$ltuid] Unknown check-in error: $ret_sign"
+		elseif ($ret_sign.message -ne 'OK') {
+			# use elseif to avoid skip when debug
+			if ($conf.display.console -or $debugging) {
+				Write-Host "[$ltuid] Unknown check-in error: $ret_sign"
+			}
 			Continue
 		}
 
@@ -166,12 +178,16 @@ foreach ($cookie in $conf.cookies) {
 			Write-Host 'Queried reward info:' $ret_reward 'data:' $ret_reward.data
 		}
 		if (($ret_info.retcode -eq -100) -or ($ret_reward.retcode -eq -100)) {
-			Write-Host "Invalid cookie format: $cookie"
+			if ($conf.display.console -or $debugging) {
+				Write-Host "Invalid cookie format: $cookie"
+			}
 			Continue
 		}
 		$current_reward = $ret_reward.data.awards[$ret_info.data.total_sign_day - 1] # Array start from 0
 		$reward_name = Format-Text -Text $current_reward.name
-		Write-Host "[$display_name] $reward_name x$($current_reward.cnt)"
+		if ($conf.display.console -or $debugging) {
+			Write-Host "[$display_name] $reward_name x$($current_reward.cnt)"
+		}
 	}
 }
 if ($conf.display.console_pause) {
