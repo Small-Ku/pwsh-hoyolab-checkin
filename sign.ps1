@@ -176,7 +176,7 @@ foreach ($cookie in $conf.cookies) {
 			}
 			if ($env:debug -ne 'pwsh-hoyolab-checkin.ignore-signed') {
 				# Disable Discord webhook when try to overwrite signed message
-				if ($conf.display.discord.reuse_msg -and $conf.display.discord.reuse_msg -match '^\d{18,}$') {
+				if ($dc_webhook -and $conf.display.discord.reuse_msg -and $conf.display.discord.reuse_msg -match '^\d{18,}$') {
 					$dc_webhook = $false
 					Write-Host 'No support for overwriting original message when checked-in already. Discord webhook will not be sent.'
 				}
