@@ -1,15 +1,27 @@
 {
-  "popup": true,
-  "duplicated_sign": false,
-  "discord_webhook_url": "",
-  "discord_webhook_username": "",
-  "discord_webhook_avatar_url": "",
-  "reuse_discord_msg": false,
-  "show_ltuid": true,
+  "display": {
+    "console_pause": false,
+    "discord": {
+      "webhook_url": "",
+      "username": "",
+      "avatar_url": "",
+      "reuse_msg": false
+    }
+  },
   "cookies": [
     "mi18nLang=en-us; ltoken=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; ltuid=123456789;",
     "mi18nLang=en-us; ltoken=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; ltuid=234567890;"
   ],
   "lang": "en-us",
-  "act_id": "e202102251931481"
+  "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+  "games": [
+    {
+      "name": "Genshin Impact",
+      "act_id": "e202102251931481",
+      "domain": "sg-hk4e-api.hoyolab.com",
+      "origin_url": "https://act.hoyolab.com/",
+      "referer_url": "https://act.hoyolab.com/",
+      "game_id": "sol"
+    }
+  ]
 }
