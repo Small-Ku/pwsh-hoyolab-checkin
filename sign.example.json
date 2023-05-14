@@ -5,7 +5,12 @@
       "webhook_url": "",
       "username": "",
       "avatar_url": "",
-      "reuse_msg": false
+      "reuse_msg": false,
+      "text": {
+        "total_sign_day": "Total signed days",
+        "total_sign_day_unit": "",
+        "reward": "Obtained reward"
+      }
     },
     "account_info": {
       "name": true,

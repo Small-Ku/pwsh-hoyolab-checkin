@@ -227,12 +227,12 @@ foreach ($cookie in $conf.cookies) {
 				'title'     = $game.name
 				'fields'    = @(
 					@{
-						'name'   = 'Total signed days'
-						'value'  = $ret_info.data.total_sign_day
+						'name'   = $conf.display.discord.text.total_sign_day
+						'value'  = "$($ret_info.data.total_sign_day)$($conf.display.discord.text.total_sign_day_unit)"
 						'inline' = $true
 					},
 					@{
-						'name'   = 'Reward'
+						'name'   = $conf.display.discord.text.reward
 						'value'  = "$reward_name x$($current_reward.cnt)"
 						'inline' = $true
 					}
@@ -266,7 +266,7 @@ if ($dc_webhook -and $discord_embed.Count) {
 		else {
 			$ret_discord = Invoke-RestMethod -Method 'Post' -Uri ($conf.display.discord.webhook_url + '?wait=true') -Body ($discord_body | ConvertTo-Json -Depth 10) -ContentType 'application/json;charset=UTF-8'
 			$conf.display.discord.reuse_msg = $ret_discord.id
-			$conf | ConvertTo-Json | Set-Content .\sign.json -Encoding 'UTF8'
+			$conf | ConvertTo-Json -Depth 10 | Set-Content .\sign.json -Encoding 'UTF8'
 		}
 	}
 	else {
