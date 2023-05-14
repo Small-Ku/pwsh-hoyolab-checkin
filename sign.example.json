@@ -1,6 +1,6 @@
 {
   "display": {
-    "console": true,
+    "console": "true",
     "discord": {
       "webhook_url": "",
       "username": "",

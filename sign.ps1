@@ -201,7 +201,8 @@ foreach ($cookie in $conf.cookies) {
 		}
 	}
 }
-if ($conf.display.console_pause) {
-	Write-Host "Press ENTER to continue ..."
+
+if ($conf.display.console -eq 'pause') {
+	Write-Host 'Press ENTER to continue ...'
 	Read-Host
 }
