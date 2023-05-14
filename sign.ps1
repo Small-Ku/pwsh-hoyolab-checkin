@@ -44,9 +44,13 @@ function Format-Text {
 $conf = Get-Content .\sign.json -Raw -Encoding 'UTF8' | ConvertFrom-Json
 $lang = $conf.lang
 $user_agent = $conf.user_agent
-$debugging = $env:debug -eq 'pwsh-hoyolab-checkin'
 
-if ($conf.notification.discord.webhook_url) {
+$debugging = $env:debug -eq 'pwsh-hoyolab-checkin'
+$dc_webhook = $conf.display.discord.webhook_url -ne ''
+if ($dc_webhook) {
+	if ($debugging) {
+		Write-Host 'Webhook to' $conf.display.discord.webhook_url 'as' $conf.display.discord.username
+	}
 	$discord_embed = @()
 }
 
@@ -96,13 +100,13 @@ foreach ($cookie in $conf.cookies) {
 		}
 		if ($conf.display.account_info.id) {
 			$display_name += "($($ret_ac_info.data.account_id))"
-  	}
+		}
 		if ($conf.display.account_info.email) {
 			$display_name += "($($ret_ac_info.data.email))"
-  	}
+		}
 		if ($conf.display.account_info.phone) {
 			$display_name += "($($ret_ac_info.data.mobile))"
-  	}
+		}
 	}
 	else {
 		$display_name = $ltuid
@@ -170,6 +174,25 @@ foreach ($cookie in $conf.cookies) {
 			if ($conf.display.console -or $debugging) {
 				Write-Host "[$display_name] $msg"
 			}
+			if ($env:debug -ne 'pwsh-hoyolab-checkin.ignore-signed') {
+				# Disable Discord webhook when try to overwrite signed message
+				if ($conf.display.discord.reuse_msg -and $conf.display.discord.reuse_msg -match '^\d{18,}$') {
+					$dc_webhook = $false
+					Write-Host 'No support for overwriting original message when checked-in already. Discord webhook will not be sent.'
+				}
+				# Send as first message in Discord
+				elseif ($dc_webhook) {
+					$discord_embed += @{
+						'title'       = $game.name
+						'description' = $msg
+						'color'       = '16711680'
+						'footer'      = @{
+							'text' = $display_name
+						}
+					}
+				}
+			}
+			
 			if (-not $debugging -and $env:debug -ne 'pwsh-hoyolab-checkin.ignore-signed')	{ Continue }
 		} 
 		# Unknown not checked-in situation
@@ -199,6 +222,55 @@ foreach ($cookie in $conf.cookies) {
 		if ($conf.display.console -or $debugging) {
 			Write-Host "[$display_name] $reward_name x$($current_reward.cnt)"
 		}
+		if ($dc_webhook) {
+			$discord_embed += @{
+				'title'     = $game.name
+				'fields'    = @(
+					@{
+						'name'   = 'Total signed days'
+						'value'  = $ret_info.data.total_sign_day
+						'inline' = $true
+					},
+					@{
+						'name'   = 'Reward'
+						'value'  = "$reward_name x$($current_reward.cnt)"
+						'inline' = $true
+					}
+				)
+				'thumbnail' = @{
+					'url' = $current_reward.icon
+				}
+				'color'     = '5635840'
+				'footer'    = @{
+					'text' = "$($ret_info.data.today) | $display_name"
+				}
+			}
+		}
+	}
+}
+
+if ($dc_webhook -and $discord_embed.Count) {
+	$discord_body = @{
+		'embeds' = $discord_embed
+	}
+	if ($conf.display.discord.username) {
+		$discord_body.username = $conf.display.discord.username
+	}
+	if ($conf.display.discord.avatar_url) {
+		$discord_body.avatar_url = $conf.display.discord.avatar_url
+	}
+	if ($conf.display.discord.reuse_msg) {
+		if ($conf.display.discord.reuse_msg -match '^\d{18,}$') {
+			$ret_discord = Invoke-RestMethod -Method 'Patch' -Uri "$($conf.display.discord.webhook_url)/messages/$($conf.display.discord.reuse_msg)" -Body ($discord_body | ConvertTo-Json -Depth 10) -ContentType 'application/json;charset=UTF-8'
+		}
+		else {
+			$ret_discord = Invoke-RestMethod -Method 'Post' -Uri ($conf.display.discord.webhook_url + '?wait=true') -Body ($discord_body | ConvertTo-Json -Depth 10) -ContentType 'application/json;charset=UTF-8'
+			$conf.display.discord.reuse_msg = $ret_discord.id
+			$conf | ConvertTo-Json | Set-Content .\sign.json -Encoding 'UTF8'
+		}
+	}
+	else {
+		$ret_discord = Invoke-RestMethod -Method 'Post' -Uri $conf.display.discord.webhook_url -Body ($discord_body | ConvertTo-Json -Depth 10) -ContentType 'application/json;charset=UTF-8'
 	}
 }
 
