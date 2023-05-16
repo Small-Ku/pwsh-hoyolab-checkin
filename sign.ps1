@@ -47,11 +47,26 @@ $user_agent = $conf.user_agent
 
 $debugging = $env:debug -eq 'pwsh-hoyolab-checkin'
 $dc_webhook = $conf.display.discord.webhook_url -ne ''
+$discord_embed_index = 0
+
 if ($dc_webhook) {
-	if ($debugging) {
-		Write-Host 'Webhook to' $conf.display.discord.webhook_url 'as' $conf.display.discord.username
+	if ($debugging -or $env:debug -eq 'pwsh-hoyolab-checkin.discord') {
+		Write-Host '[DEBUG] Webhook as' $conf.display.discord.username
 	}
 	$discord_embed = @()
+	if ($conf.display.discord.reuse_msg -and $conf.display.discord.reuse_msg -match '^\d{18,}$') {
+		$ret_discord = Invoke-RestMethod -Method 'Get' -Uri "$($conf.display.discord.webhook_url)/messages/$($conf.display.discord.reuse_msg)" -ContentType 'application/json;charset=UTF-8'
+		if ($debugging -or $env:debug -eq 'pwsh-hoyolab-checkin.discord') {
+			Write-Host "[DEBUG] Previous message to be reused:`n" ( $ret_discord.embeds | ConvertTo-Json -Depth 10 ) # avoid id outputs
+		}
+		if ($ret_discord.embeds.Length -eq ($conf.cookies.Length * $conf.games.Length)) {
+			$discord_embed = $ret_discord.embeds
+		}
+		else {
+			$conf.display.discord.reuse_msg = true
+			Write-Host '[WARN] Config has been changed. Will not re-use the previous message.'
+		}
+	}
 }
 
 ####################
@@ -61,7 +76,7 @@ if ($dc_webhook) {
 foreach ($cookie in $conf.cookies) {
 	# Basic check if cookie valid
 	if (-not(($cookie -match 'ltoken=[0-9a-zA-Z]{40}') -and ($cookie -match 'ltuid=(\d+)'))) {
-		Write-Host "Invalid cookie format: $cookie"
+		Write-Host "[ERROR] Invalid cookie format: $cookie"
 		Continue
 	}
 	$ltuid = $Matches.1
@@ -92,7 +107,7 @@ foreach ($cookie in $conf.cookies) {
 	$ret_ac_info = Invoke-RestMethod -Method 'Get' -Uri 'https://api-account-os.hoyolab.com/auth/api/getUserAccountInfoByLToken' -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
 	if ($debugging) {
 		Write-Host
-		Write-Host 'Account info:' $ret_ac_info 'data:' $ret_ac_info.data
+		Write-Host '[DEBUG] Account info:' $ret_ac_info 'data:' $ret_ac_info.data
 	}
 	if ($ret_ac_info.retcode -eq -0) {
 		if ($conf.display.account_info.name) {
@@ -115,7 +130,7 @@ foreach ($cookie in $conf.cookies) {
 	foreach ($game in $conf.games) {
 		if ($debugging) {
 			Write-Host
-			Write-Host 'Signing for:' $game
+			Write-Host '[DEBUG] Signing for:' $game
 		}
 		# URL setup
 		$act_id = $game.act_id
@@ -141,66 +156,92 @@ foreach ($cookie in $conf.cookies) {
 		# Query info about check-in
 		$ret_info = Invoke-RestMethod -Method 'Get' -Uri $api_info_url -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
 		if ($debugging) {
-			Write-Host 'Queried info:' $ret_info 'data:' $ret_info.data
+			Write-Host '[DEBUG] Queried info:' $ret_info 'data:' $ret_info.data
 		}
 		if ($ret_info.retcode -eq -100) {
 			if ($conf.display.console -or $debugging) {
-				Write-Host "Invalid cookie: $ltuid ($ret_info)"
+				Write-Host "[ERROR] Invalid cookie: $ltuid ($ret_info)"
 			}
 			Continue
 		}
 
 		# Request check-in
 		if ($conf.display.console -or $debugging) {
-			Write-Host "Checking $display_name in for $($game.name)"
+			Write-Host "[INFO] Checking $display_name in for $($game.name)"
 		}
 		$sign_body = @{
 			'act_id' = $act_id
 		} | ConvertTo-Json
 		$ret_sign = Invoke-RestMethod -Method 'Post' -Uri $api_sign_url -Body $sign_body -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
 		if ($debugging) {
-			Write-Host 'Check-in:' $ret_sign 'data:' $ret_sign.data
+			Write-Host '[DEBUG] Check-in:' $ret_sign 'data:' $ret_sign.data
 		}
 		if ($ret_sign.retcode -eq -100) {
 			if ($conf.display.console -or $debugging) {
-				Write-Host "Invalid cookie: $ltuid ($ret_sign)"
+				Write-Host "[ERROR] Invalid cookie: $ltuid ($ret_sign)"
 			}
 			Continue
 		}
+		
+		# Warn about difference between new and old check-in when reuse message in Discord
+		$old_checkin_date = ""
+		if ($dc_webhook -and $conf.display.discord.reuse_msg -and $conf.display.discord.reuse_msg -match '^\d{18,}$') {
+			if ($discord_embed[$discord_embed_index].title -ne $game.name) {
+				Write-Host '[WARN] Old game name' $discord_embed[$discord_embed_index].title 'not match with new:' $game.name
+			}
+			if ($discord_embed[$discord_embed_index].footer.text -match '^(?<date>\d{4}-\d{2}-\d{2})\s\|\s(?<name>\w\*{4}.+)') {
+				$old_checkin_date = $Matches.date
+				$old_display_name = $Matches.name
+				if ($debugging -or $env:debug -eq 'pwsh-hoyolab-checkin.discord') {
+					Write-Host "[INFO] Old info:" $old_checkin_date '|' $old_display_name
+				}
+				if ($old_display_name -ne $display_name) {
+					Write-Host '[WARN] Old display name' $old_display_name 'not match with new:' $display_name
+				}
+			}
+			else {
+				Write-Host '[WARN] Old display name is invalid.'
+			}
+		}
 
-		# Already checked-in before
+		# Already checked-in in the same day
 		if ($ret_info.data.is_sign) {
 			$msg = Format-Text -Text $ret_sign.message
 			if ($conf.display.console -or $debugging) {
-				Write-Host "[$display_name] $msg"
+				Write-Host "[INFO] [$display_name] $msg"
 			}
-			if ($env:debug -ne 'pwsh-hoyolab-checkin.ignore-signed') {
-				# Disable Discord webhook when try to overwrite signed message
-				if ($dc_webhook -and $conf.display.discord.reuse_msg -and $conf.display.discord.reuse_msg -match '^\d{18,}$') {
-					$dc_webhook = $false
-					Write-Host 'No support for overwriting original message when checked-in already. Discord webhook will not be sent.'
+			# Check if not reusing message or previous content is outdated
+			if ($old_checkin_date -eq "" -or $old_checkin_date -eq $ret_info.data.today) {
+				if (-not $debugging -and $env:debug -ne 'pwsh-hoyolab-checkin.ignore-signed') { 
+					$discord_embed_index += 1
+					Continue
 				}
-				# Send as first message in Discord
-				elseif ($dc_webhook) {
-					$discord_embed += @{
+				if ($dc_webhook) {
+					$new_embed = @{
 						'title'       = $game.name
 						'description' = $msg
 						'color'       = '16711680'
 						'footer'      = @{
-							'text' = $display_name
+							'text' = "$($ret_info.data.today) | $display_name"
 						}
+					}
+					if ($debugging -or $env:debug -eq 'pwsh-hoyolab-checkin.discord') {
+						Write-Host "[DEBUG] Adding embed:`n" ( $new_embed | ConvertTo-Json -Depth 2 )
+					}
+					# No overwrite on old message
+					if (-not $conf.display.discord.reuse_msg -or $conf.display.discord.reuse_msg -notmatch '^\d{18,}$') {
+						$discord_embed += $new_embed
 					}
 				}
 			}
-			
-			if (-not $debugging -and $env:debug -ne 'pwsh-hoyolab-checkin.ignore-signed')	{ Continue }
 		} 
 		# Unknown not checked-in situation
 		elseif ($ret_sign.message -ne 'OK') {
 			# use elseif to avoid skip when debug
 			if ($conf.display.console -or $debugging) {
-				Write-Host "[$ltuid] Unknown check-in error: $ret_sign"
+				Write-Host "[ERROR] [$ltuid] Unknown check-in error: $ret_sign"
 			}
+			$discord_embed_index += 1
 			Continue
 		}
 
@@ -208,22 +249,22 @@ foreach ($cookie in $conf.cookies) {
 		$ret_info = Invoke-RestMethod -Method 'Get' -Uri $api_info_url -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
 		$ret_reward = Invoke-RestMethod -Method 'Get' -Uri $api_reward_url -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
 		if ($debugging) {
-			Write-Host 'Queried checkin info:' $ret_info 'data:' $ret_info.data
-			Write-Host 'Queried reward info:' $ret_reward 'data:' $ret_reward.data
+			Write-Host '[DEBUG] Queried checkin info:' $ret_info 'data:' $ret_info.data
+			Write-Host '[DEBUG] Queried reward info:' $ret_reward 'data:' $ret_reward.data
 		}
 		if (($ret_info.retcode -eq -100) -or ($ret_reward.retcode -eq -100)) {
 			if ($conf.display.console -or $debugging) {
-				Write-Host "Invalid cookie format: $cookie"
+				Write-Host "[ERROR] Invalid cookie format: $cookie"
 			}
 			Continue
 		}
 		$current_reward = $ret_reward.data.awards[$ret_info.data.total_sign_day - 1] # Array start from 0
 		$reward_name = Format-Text -Text $current_reward.name
 		if ($conf.display.console -or $debugging) {
-			Write-Host "[$display_name] $reward_name x$($current_reward.cnt)"
+			Write-Host "[INFO] [$display_name] $reward_name x$($current_reward.cnt)"
 		}
 		if ($dc_webhook) {
-			$discord_embed += @{
+			$new_embed = @{
 				'title'     = $game.name
 				'fields'    = @(
 					@{
@@ -245,13 +286,28 @@ foreach ($cookie in $conf.cookies) {
 					'text' = "$($ret_info.data.today) | $display_name"
 				}
 			}
+			if ($debugging -or $env:debug -eq 'pwsh-hoyolab-checkin.discord') {
+				Write-Host "[DEBUG] Adding embed:`n" ( $new_embed | ConvertTo-Json -Depth 2 )
+			}
+			# Overwrite old embed when reuse message
+			if ($conf.display.discord.reuse_msg -and $conf.display.discord.reuse_msg -match '^\d{18,}$') {
+				$discord_embed[$discord_embed_index] = $new_embed
+			}
+			# Create new embed in new message
+			else {
+				$discord_embed += $new_embed
+			}
 		}
+		$discord_embed_index += 1
 	}
 }
 
 if ($dc_webhook -and $discord_embed.Count) {
 	$discord_body = @{
 		'embeds' = $discord_embed
+	}
+	if ($debugging -or $env:debug -eq 'pwsh-hoyolab-checkin.discord') {
+		Write-Host "[DEBUG] Discord message body:`n" ( $discord_body | ConvertTo-Json -Depth 5 )
 	}
 	if ($conf.display.discord.username) {
 		$discord_body.username = $conf.display.discord.username
@@ -275,6 +331,6 @@ if ($dc_webhook -and $discord_embed.Count) {
 }
 
 if ($conf.display.console -eq 'pause') {
-	Write-Host 'Press ENTER to continue ...'
+	Write-Host '[INFO] Press ENTER to continue ...'
 	Read-Host
 }
