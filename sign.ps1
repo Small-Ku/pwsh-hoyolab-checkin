@@ -184,7 +184,7 @@ foreach ($cookie in $conf.cookies) {
 		}
 		
 		# Warn about difference between new and old check-in when reuse message in Discord
-		$old_checkin_date = ""
+		$old_checkin_date = ''
 		if ($dc_webhook -and $conf.display.discord.reuse_msg -and $conf.display.discord.reuse_msg -match '^\d{18,}$') {
 			if ($discord_embed[$discord_embed_index].title -ne $game.name) {
 				Write-Host '[WARN] Old game name' $discord_embed[$discord_embed_index].title 'not match with new:' $game.name
@@ -193,7 +193,7 @@ foreach ($cookie in $conf.cookies) {
 				$old_checkin_date = $Matches.date
 				$old_display_name = $Matches.name
 				if ($debugging -or $env:debug -eq 'pwsh-hoyolab-checkin.discord') {
-					Write-Host "[INFO] Old info:" $old_checkin_date '|' $old_display_name
+					Write-Host '[INFO] Old info:' $old_checkin_date '|' $old_display_name
 				}
 				if ($old_display_name -ne $display_name) {
 					Write-Host '[WARN] Old display name' $old_display_name 'not match with new:' $display_name
@@ -211,7 +211,7 @@ foreach ($cookie in $conf.cookies) {
 				Write-Host "[INFO] [$display_name] $msg"
 			}
 			# Check if not reusing message or previous content is outdated
-			if ($old_checkin_date -eq "" -or $old_checkin_date -eq $ret_info.data.today) {
+			if ($old_checkin_date -eq '' -or $old_checkin_date -eq $ret_info.data.today) {
 				if (-not $debugging -and $env:debug -ne 'pwsh-hoyolab-checkin.ignore-signed') { 
 					$discord_embed_index += 1
 					Continue
