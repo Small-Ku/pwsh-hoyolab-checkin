@@ -306,27 +306,28 @@ if ($dc_webhook -and $discord_embed.Count) {
 	$discord_body = @{
 		'embeds' = $discord_embed
 	}
-	if ($debugging -or $env:debug -eq 'pwsh-hoyolab-checkin.discord') {
-		Write-Host "[DEBUG] Discord message body:`n" ( $discord_body | ConvertTo-Json -Depth 5 )
-	}
 	if ($conf.display.discord.username) {
 		$discord_body.username = $conf.display.discord.username
 	}
 	if ($conf.display.discord.avatar_url) {
 		$discord_body.avatar_url = $conf.display.discord.avatar_url
 	}
+	$discord_body = $discord_body | ConvertTo-Json -Depth 10
+	if ($debugging -or $env:debug -eq 'pwsh-hoyolab-checkin.discord') {
+		Write-Host "[DEBUG] Discord message body:`n" $discord_body
+	}
 	if ($conf.display.discord.reuse_msg) {
 		if ($conf.display.discord.reuse_msg -match '^\d{18,}$') {
-			$ret_discord = Invoke-RestMethod -Method 'Patch' -Uri "$($conf.display.discord.webhook_url)/messages/$($conf.display.discord.reuse_msg)" -Body ($discord_body | ConvertTo-Json -Depth 10) -ContentType 'application/json;charset=UTF-8'
+			$ret_discord = Invoke-RestMethod -Method 'Patch' -Uri "$($conf.display.discord.webhook_url)/messages/$($conf.display.discord.reuse_msg)" -Body $discord_body -ContentType 'application/json;charset=UTF-8'
 		}
 		else {
-			$ret_discord = Invoke-RestMethod -Method 'Post' -Uri ($conf.display.discord.webhook_url + '?wait=true') -Body ($discord_body | ConvertTo-Json -Depth 10) -ContentType 'application/json;charset=UTF-8'
+			$ret_discord = Invoke-RestMethod -Method 'Post' -Uri ($conf.display.discord.webhook_url + '?wait=true') -Body $discord_body -ContentType 'application/json;charset=UTF-8'
 			$conf.display.discord.reuse_msg = $ret_discord.id
 			$conf | ConvertTo-Json -Depth 10 | Set-Content .\sign.json -Encoding 'UTF8'
 		}
 	}
 	else {
-		$ret_discord = Invoke-RestMethod -Method 'Post' -Uri $conf.display.discord.webhook_url -Body ($discord_body | ConvertTo-Json -Depth 10) -ContentType 'application/json;charset=UTF-8'
+		$ret_discord = Invoke-RestMethod -Method 'Post' -Uri $conf.display.discord.webhook_url -Body $discord_body -ContentType 'application/json;charset=UTF-8'
 	}
 }
 
