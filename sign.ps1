@@ -197,34 +197,6 @@ foreach ($cookie in $conf.cookies) {
 		if ($debugging) {
 			Write-Host '[DEBUG] Check-in:' $ret_sign 'data:' $ret_sign.data 'gt_result:' $ret_sign.data.gt_result
 		}
-		if ($ret_sign.data.gt_result -and -not ($ret_sign.data.gt_result.risk_code -eq 0 -and -not $ret_sign.data.gt_result.is_risk -and $ret_sign.data.gt_result.success -eq 0)) {
-			if ($conf.display.console -or $debugging) {
-				Write-Host "[ERROR] Captcha requested: $ltuid (" $ret_sign.data.gt_result ")"
-			}
-			if ($dc_webhook) {
-				$discord_need_ping = $true
-				$new_embed = @{
-					'title'       = $game.name
-					'description' = $conf.display.discord.text.need_captcha
-					'color'       = '16711680'
-					'footer'      = @{
-						'text' = "$($ret_info.data.today) | $display_name"
-					}
-				}
-				if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
-					Write-Host "[DEBUG] Adding embed:`n" ( $new_embed | ConvertTo-Json -Depth 2 )
-				}
-				# Overwrite old embed when reuse message
-				if ($conf.display.discord.reuse_msg -and $conf.display.discord.reuse_msg -match '^\d{18,}$') {
-					$discord_embed[$discord_embed_index] = $new_embed
-				}
-				# Create new embed in new message
-				else {
-					$discord_embed += $new_embed
-				}
-			}
-			Continue
-		}
 		if ($ret_sign.retcode -eq -100) {
 			if ($conf.display.console -or $debugging) {
 				Write-Host "[ERROR] Invalid cookie: $ltuid ($ret_sign)"
@@ -261,9 +233,6 @@ foreach ($cookie in $conf.cookies) {
 			}
 			# Check if not reusing message or previous content is outdated
 			if ($old_checkin_date -eq '' -or $old_checkin_date -eq $ret_info.data.today) {
-				if (-not $debugging -and $env:debug -ne 'pwsh-hoyolab-checkin.ignore-signed') {
-					Continue
-				}
 				# No overwrite on old message
 				if ($dc_webhook -and (-not $conf.display.discord.reuse_msg -or $conf.display.discord.reuse_msg -notmatch '^\d{18,}$')) {
 					$new_embed = @{
@@ -271,7 +240,7 @@ foreach ($cookie in $conf.cookies) {
 						'description' = $msg
 						'color'       = '16711680'
 						'footer'      = @{
-							'text' = "$($ret_info.data.today) | $display_name"
+							'text' = $display_name
 						}
 					}
 					if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
@@ -280,7 +249,36 @@ foreach ($cookie in $conf.cookies) {
 					$discord_embed += $new_embed
 				}
 			}
-		} 
+		}
+		# Check if captcha needed
+		elseif ($ret_sign.data.gt_result -and -not ($ret_sign.data.gt_result.risk_code -eq 0 -and -not $ret_sign.data.gt_result.is_risk -and $ret_sign.data.gt_result.success -eq 0)) {
+			if ($conf.display.console -or $debugging) {
+				Write-Host "[ERROR] Captcha requested: $ltuid (" $ret_sign.data.gt_result ")"
+			}
+			if ($dc_webhook) {
+				$discord_need_ping = $true
+				$new_embed = @{
+					'title'       = $game.name
+					'description' = $conf.display.discord.text.need_captcha
+					'color'       = '16711680'
+					'footer'      = @{
+						'text' = $display_name
+					}
+				}
+				if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
+					Write-Host "[DEBUG] Adding embed:`n" ( $new_embed | ConvertTo-Json -Depth 2 )
+				}
+				# Overwrite old embed when reuse message
+				if ($conf.display.discord.reuse_msg -and $conf.display.discord.reuse_msg -match '^\d{18,}$') {
+					$discord_embed[$discord_embed_index] = $new_embed
+				}
+				# Create new embed in new message
+				else {
+					$discord_embed += $new_embed
+				}
+			}
+			Continue
+		}
 		# Unknown not checked-in situation
 		elseif ($ret_sign.message -ne 'OK') {
 			# use elseif to avoid skip when debug
@@ -289,9 +287,10 @@ foreach ($cookie in $conf.cookies) {
 			}
 			Continue
 		}
-
 		# Get new info after checked-in
-		$ret_info = Invoke-RestMethod -Method 'Get' -Uri $api_info_url -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
+		else {
+			$ret_info = Invoke-RestMethod -Method 'Get' -Uri $api_info_url -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
+		}
 		$ret_reward = Invoke-RestMethod -Method 'Get' -Uri $api_reward_url -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
 		if ($debugging) {
 			Write-Host '[DEBUG] Queried checkin info:' $ret_info 'data:' $ret_info.data
@@ -303,6 +302,7 @@ foreach ($cookie in $conf.cookies) {
 			}
 			Continue
 		}
+
 		$current_reward = $ret_reward.data.awards[$ret_info.data.total_sign_day - 1] # Array start from 0
 		$reward_name = Format-Text -Text $current_reward.name
 		if ($conf.display.console -or $debugging) {
