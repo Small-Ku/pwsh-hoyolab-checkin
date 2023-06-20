@@ -47,13 +47,29 @@ $user_agent = $conf.user_agent
 
 $debugging = $env:debug -eq 'pwsh-hoyolab-checkin'
 $dc_webhook = $conf.display.discord.webhook_url -ne ''
-$discord_embed_index = 0
+$discord_embed_index = -1
 
 if ($dc_webhook) {
 	if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
 		Write-Host '[DEBUG] Webhook as' $conf.display.discord.username
 	}
 	$discord_embed = @()
+	if ($conf.display.discord.ping) {
+		$discord_need_ping = $false
+		$discord_ping = ""
+		if ($conf.display.discord.ping.user) {
+			$discord_ping += "<@" + ($conf.display.discord.ping.user -join "> <@") + ">"
+		}
+		if ($conf.display.discord.ping.user -and $conf.display.discord.ping.role) {
+			$discord_ping += " "
+		}
+		if ($conf.display.discord.ping.role) {
+			$discord_ping += "<@&" + ($conf.display.discord.ping.role -join "> <@&") + ">"
+		}
+		if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
+			Write-Host "[DEBUG] ID that will be ping: " $discord_ping
+		}
+	}
 	if ($conf.display.discord.reuse_msg -and $conf.display.discord.reuse_msg -match '^\d{18,}$') {
 		$ret_discord = Invoke-RestMethod -Method 'Get' -Uri "$($conf.display.discord.webhook_url)/messages/$($conf.display.discord.reuse_msg)" -ContentType 'application/json;charset=UTF-8'
 		if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
@@ -132,6 +148,7 @@ foreach ($cookie in $conf.cookies) {
 			Write-Host
 			Write-Host '[DEBUG] Signing for:' $game
 		}
+		$discord_embed_index += 1
 		# URL setup
 		$act_id = $game.act_id
 		$base_url = 'https://' + $game.domain
@@ -145,7 +162,6 @@ foreach ($cookie in $conf.cookies) {
 			'Accept'            = 'application/json, text/plain, */*'
     		'Accept-Encoding'   = 'gzip, deflate, br'
 			'Accept-Language'   = 'en-US,en;q=0.9'
-   		 	'User-Agent'        = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
     		'Connection'        = 'keep-alive'
     		'x-rpc-app_version' = '2.34.1'
    		 	'x-rpc-client_type' = '4'
@@ -185,6 +201,28 @@ foreach ($cookie in $conf.cookies) {
 			if ($conf.display.console -or $debugging) {
 				Write-Host "[ERROR] Captcha requested: $ltuid (" $ret_sign.data.gt_result ")"
 			}
+			if ($dc_webhook) {
+				$discord_need_ping = $true
+				$new_embed = @{
+					'title'       = $game.name
+					'description' = $conf.display.discord.text.need_captcha
+					'color'       = '16711680'
+					'footer'      = @{
+						'text' = "$($ret_info.data.today) | $display_name"
+					}
+				}
+				if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
+					Write-Host "[DEBUG] Adding embed:`n" ( $new_embed | ConvertTo-Json -Depth 2 )
+				}
+				# Overwrite old embed when reuse message
+				if ($conf.display.discord.reuse_msg -and $conf.display.discord.reuse_msg -match '^\d{18,}$') {
+					$discord_embed[$discord_embed_index] = $new_embed
+				}
+				# Create new embed in new message
+				else {
+					$discord_embed += $new_embed
+				}
+			}
 			Continue
 		}
 		if ($ret_sign.retcode -eq -100) {
@@ -223,8 +261,7 @@ foreach ($cookie in $conf.cookies) {
 			}
 			# Check if not reusing message or previous content is outdated
 			if ($old_checkin_date -eq '' -or $old_checkin_date -eq $ret_info.data.today) {
-				if (-not $debugging -and $env:debug -ne 'pwsh-hoyolab-checkin.ignore-signed') { 
-					$discord_embed_index += 1
+				if (-not $debugging -and $env:debug -ne 'pwsh-hoyolab-checkin.ignore-signed') {
 					Continue
 				}
 				# No overwrite on old message
@@ -250,7 +287,6 @@ foreach ($cookie in $conf.cookies) {
 			if ($conf.display.console -or $debugging) {
 				Write-Host "[ERROR] [$ltuid] Unknown check-in error: $ret_sign"
 			}
-			$discord_embed_index += 1
 			Continue
 		}
 
@@ -307,12 +343,12 @@ foreach ($cookie in $conf.cookies) {
 				$discord_embed += $new_embed
 			}
 		}
-		$discord_embed_index += 1
 	}
 }
 
 if ($dc_webhook -and $discord_embed.Count) {
 	$discord_body = @{
+		'content' = ''
 		'embeds' = $discord_embed
 	}
 	if ($conf.display.discord.username) {
@@ -321,21 +357,27 @@ if ($dc_webhook -and $discord_embed.Count) {
 	if ($conf.display.discord.avatar_url) {
 		$discord_body.avatar_url = $conf.display.discord.avatar_url
 	}
-	$discord_body = $discord_body | ConvertTo-Json -Depth 10
+	$discord_body_json = $discord_body | ConvertTo-Json -Depth 10
 	if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
 		Write-Host "[DEBUG] Discord message body:`n" $discord_body
 	}
 	if ($conf.display.discord.reuse_msg) {
 		if ($conf.display.discord.reuse_msg -match '^\d{18,}$') {
-			$ret_discord = Invoke-RestMethod -Method 'Patch' -Uri "$($conf.display.discord.webhook_url)/messages/$($conf.display.discord.reuse_msg)" -Body $discord_body -ContentType 'application/json;charset=UTF-8'
+			$ret_discord = Invoke-RestMethod -Method 'Patch' -Uri "$($conf.display.discord.webhook_url)/messages/$($conf.display.discord.reuse_msg)" -Body $discord_body_json -ContentType 'application/json;charset=UTF-8'
 		}
 		else {
-			$ret_discord = Invoke-RestMethod -Method 'Post' -Uri ($conf.display.discord.webhook_url + '?wait=true') -Body $discord_body -ContentType 'application/json;charset=UTF-8'
+			$ret_discord = Invoke-RestMethod -Method 'Post' -Uri ($conf.display.discord.webhook_url + '?wait=true') -Body $discord_body_json -ContentType 'application/json;charset=UTF-8'
 			$conf.display.discord.reuse_msg = $ret_discord.id
 			$conf | ConvertTo-Json -Depth 10 | Set-Content .\sign.json -Encoding 'UTF8'
 		}
 	}
 	else {
+		$ret_discord = Invoke-RestMethod -Method 'Post' -Uri $conf.display.discord.webhook_url -Body $discord_body_json -ContentType 'application/json;charset=UTF-8'
+	}
+	if ($discord_need_ping) {
+		$discord_body.content = $discord_ping
+		$discord_body.embeds = $null
+		$discord_body = $discord_body | ConvertTo-Json -Depth 10
 		$ret_discord = Invoke-RestMethod -Method 'Post' -Uri $conf.display.discord.webhook_url -Body $discord_body -ContentType 'application/json;charset=UTF-8'
 	}
 }

@@ -9,7 +9,12 @@
       "text": {
         "total_sign_day": "Total signed days",
         "total_sign_day_unit": "",
-        "reward": "Obtained reward"
+        "reward": "Obtained reward",
+        "need_captcha": "Captcha required. Please check-in manually."
+      },
+      "ping": {
+        "user": [],
+        "role": []
       }
     },
     "account_info": {
@@ -23,7 +28,7 @@
     "mi18nLang=en-us; ltoken=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; ltuid=234567890;"
   ],
   "lang": "en-us",
-  "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
   "games": [
     {
       "name": "Genshin Impact",
