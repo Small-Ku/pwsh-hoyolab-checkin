@@ -50,13 +50,13 @@ $dc_webhook = $conf.display.discord.webhook_url -ne ''
 $discord_embed_index = 0
 
 if ($dc_webhook) {
-	if ($debugging -or $env:debug -eq 'pwsh-hoyolab-checkin.discord') {
+	if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
 		Write-Host '[DEBUG] Webhook as' $conf.display.discord.username
 	}
 	$discord_embed = @()
 	if ($conf.display.discord.reuse_msg -and $conf.display.discord.reuse_msg -match '^\d{18,}$') {
 		$ret_discord = Invoke-RestMethod -Method 'Get' -Uri "$($conf.display.discord.webhook_url)/messages/$($conf.display.discord.reuse_msg)" -ContentType 'application/json;charset=UTF-8'
-		if ($debugging -or $env:debug -eq 'pwsh-hoyolab-checkin.discord') {
+		if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
 			Write-Host "[DEBUG] Previous message to be reused:`n" ( $ret_discord.embeds | ConvertTo-Json -Depth 10 ) # avoid id outputs
 		}
 		if ($ret_discord.embeds.Length -eq ($conf.cookies.Length * $conf.games.Length)) {
@@ -94,15 +94,15 @@ foreach ($cookie in $conf.cookies) {
 	# Get account info
 	$session = New-WebSession -Cookies $jar -For 'https://api-account-os.hoyolab.com'
 	$headers = @{
-		'sec-ch-ua'        = '" Not A;Brand";v="99", "Chromium";v="90", "Google Chrome";v="90"'
 		'Accept'           = 'application/json, text/plain, */*'
-		'sec-ch-ua-mobile' = '?0'
+		'Accept-Language'  = 'en-US,en;q=0.9'
 		'Origin'           = 'https://act.hoyolab.com'
+		'Referer'          = 'https://act.hoyolab.com/'
+		'sec-ch-ua'        = '" Not A;Brand";v="99", "Chromium";v="90", "Google Chrome";v="90"'
+		'sec-ch-ua-mobile' = '?0'
 		'Sec-Fetch-Site'   = 'same-site'
 		'Sec-Fetch-Mode'   = 'cors'
 		'Sec-Fetch-Dest'   = 'empty'
-		'Referer'          = 'https://act.hoyolab.com'
-		'Accept-Language'  = 'en-US,en;q=0.9'
 	}
 	$ret_ac_info = Invoke-RestMethod -Method 'Get' -Uri 'https://api-account-os.hoyolab.com/auth/api/getUserAccountInfoByLToken' -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
 	if ($debugging) {
@@ -142,15 +142,20 @@ foreach ($cookie in $conf.cookies) {
 		# Web Session setup
 		$session = New-WebSession -Cookies $jar -For $base_url
 		$headers = @{
-			'sec-ch-ua'        = '" Not A;Brand";v="99", "Chromium";v="90", "Google Chrome";v="90"'
-			'Accept'           = 'application/json, text/plain, */*'
-			'sec-ch-ua-mobile' = '?0'
-			'Origin'           = $game.origin_url
-			'Sec-Fetch-Site'   = 'same-site'
-			'Sec-Fetch-Mode'   = 'cors'
-			'Sec-Fetch-Dest'   = 'empty'
-			'Referer'          = $game.referer_url
-			'Accept-Language'  = 'en-US,en;q=0.9'
+			'Accept'            = 'application/json, text/plain, */*'
+    		'Accept-Encoding'   = 'gzip, deflate, br'
+			'Accept-Language'   = 'en-US,en;q=0.9'
+   		 	'User-Agent'        = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+    		'Connection'        = 'keep-alive'
+    		'x-rpc-app_version' = '2.34.1'
+   		 	'x-rpc-client_type' = '4'
+			'Sec-Fetch-Site'    = 'same-site'
+			'Sec-Fetch-Mode'    = 'cors'
+			'Sec-Fetch-Dest'    = 'empty'
+			'sec-ch-ua'         = '" Not A;Brand";v="99", "Chromium";v="90", "Google Chrome";v="90"'
+			'sec-ch-ua-mobile'  = '?0'
+			'Origin'            = $game.origin_url
+			'Referer'           = $game.referer_url
 		}
 
 		# Query info about check-in
@@ -174,7 +179,7 @@ foreach ($cookie in $conf.cookies) {
 		} | ConvertTo-Json
 		$ret_sign = Invoke-RestMethod -Method 'Post' -Uri $api_sign_url -Body $sign_body -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
 		if ($debugging) {
-			Write-Host '[DEBUG] Check-in:' $ret_sign 'data:' $ret_sign.data
+			Write-Host '[DEBUG] Check-in:' $ret_sign 'data:' $ret_sign.data 'gt_result:' $ret_sign.data.gt_result
 		}
 		if ($ret_sign.retcode -eq -100) {
 			if ($conf.display.console -or $debugging) {
@@ -192,8 +197,8 @@ foreach ($cookie in $conf.cookies) {
 			if ($discord_embed[$discord_embed_index].footer.text -match '^(?<date>\d{4}-\d{2}-\d{2})\s\|\s(?<name>\w\*{4}.+)') {
 				$old_checkin_date = $Matches.date
 				$old_display_name = $Matches.name
-				if ($debugging -or $env:debug -eq 'pwsh-hoyolab-checkin.discord') {
-					Write-Host '[INFO] Old info:' $old_checkin_date '|' $old_display_name
+				if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
+					Write-Host '[DEBUG] Old info:' $old_checkin_date '|' $old_display_name
 				}
 				if ($old_display_name -ne $display_name) {
 					Write-Host '[WARN] Old display name' $old_display_name 'not match with new:' $display_name
@@ -216,7 +221,8 @@ foreach ($cookie in $conf.cookies) {
 					$discord_embed_index += 1
 					Continue
 				}
-				if ($dc_webhook) {
+				# No overwrite on old message
+				if ($dc_webhook -and (-not $conf.display.discord.reuse_msg -or $conf.display.discord.reuse_msg -notmatch '^\d{18,}$')) {
 					$new_embed = @{
 						'title'       = $game.name
 						'description' = $msg
@@ -225,13 +231,10 @@ foreach ($cookie in $conf.cookies) {
 							'text' = "$($ret_info.data.today) | $display_name"
 						}
 					}
-					if ($debugging -or $env:debug -eq 'pwsh-hoyolab-checkin.discord') {
+					if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
 						Write-Host "[DEBUG] Adding embed:`n" ( $new_embed | ConvertTo-Json -Depth 2 )
 					}
-					# No overwrite on old message
-					if (-not $conf.display.discord.reuse_msg -or $conf.display.discord.reuse_msg -notmatch '^\d{18,}$') {
-						$discord_embed += $new_embed
-					}
+					$discord_embed += $new_embed
 				}
 			}
 		} 
@@ -286,7 +289,7 @@ foreach ($cookie in $conf.cookies) {
 					'text' = "$($ret_info.data.today) | $display_name"
 				}
 			}
-			if ($debugging -or $env:debug -eq 'pwsh-hoyolab-checkin.discord') {
+			if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
 				Write-Host "[DEBUG] Adding embed:`n" ( $new_embed | ConvertTo-Json -Depth 2 )
 			}
 			# Overwrite old embed when reuse message
@@ -313,7 +316,7 @@ if ($dc_webhook -and $discord_embed.Count) {
 		$discord_body.avatar_url = $conf.display.discord.avatar_url
 	}
 	$discord_body = $discord_body | ConvertTo-Json -Depth 10
-	if ($debugging -or $env:debug -eq 'pwsh-hoyolab-checkin.discord') {
+	if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
 		Write-Host "[DEBUG] Discord message body:`n" $discord_body
 	}
 	if ($conf.display.discord.reuse_msg) {
