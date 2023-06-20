@@ -181,6 +181,12 @@ foreach ($cookie in $conf.cookies) {
 		if ($debugging) {
 			Write-Host '[DEBUG] Check-in:' $ret_sign 'data:' $ret_sign.data 'gt_result:' $ret_sign.data.gt_result
 		}
+		if ($ret_sign.data.gt_result -and -not ($ret_sign.data.gt_result.risk_code -eq 0 -and -not $ret_sign.data.gt_result.is_risk -and $ret_sign.data.gt_result.success -eq 0)) {
+			if ($conf.display.console -or $debugging) {
+				Write-Host "[ERROR] Captcha requested: $ltuid (" $ret_sign.data.gt_result ")"
+			}
+			Continue
+		}
 		if ($ret_sign.retcode -eq -100) {
 			if ($conf.display.console -or $debugging) {
 				Write-Host "[ERROR] Invalid cookie: $ltuid ($ret_sign)"
