@@ -162,7 +162,6 @@ foreach ($cookie in $conf.cookies) {
 			'Accept'            = 'application/json, text/plain, */*'
     		'Accept-Encoding'   = 'gzip, deflate, br'
 			'Accept-Language'   = 'en-US,en;q=0.9'
-    		'Connection'        = 'keep-alive'
     		'x-rpc-app_version' = '2.34.1'
    		 	'x-rpc-client_type' = '4'
 			'Sec-Fetch-Site'    = 'same-site'
