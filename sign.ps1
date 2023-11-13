@@ -97,7 +97,7 @@ foreach ($cookie in $conf.cookies) {
 			Continue
 		}
 	} else {
-		if (-not(($cookie -match 'ltoken=[0-9a-zA-Z]{40}') -and($cookie -match 'ltuid=(\d+)'))) {
+		if (-not(($cookie -match 'ltoken=[0-9a-zA-Z]{40}') -and ($cookie -match 'ltuid=(\d+)'))) {
 			Write-Host "[ERROR] Invalid cookie format: $cookie"
 			Continue
 		}
