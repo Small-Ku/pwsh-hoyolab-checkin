@@ -91,7 +91,7 @@ if ($dc_webhook) {
 
 foreach ($cookie in $conf.cookies) {
 	# Basic check if cookie valid
-	if (-not(($cookie -match 'ltoken=[0-9a-zA-Z]{40}') -and ($cookie -match 'ltuid=(\d+)'))) {
+	if (-not(($cookie -match 'ltoken(?:_v2)?=(?:v2_)?[0-9a-zA-Z]{40,128}') -and ($cookie -match 'ltuid(?:_v2)?=(\d+)'))) {
 		Write-Host "[ERROR] Invalid cookie format: $cookie"
 		Continue
 	}
