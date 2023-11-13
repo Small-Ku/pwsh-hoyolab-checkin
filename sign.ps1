@@ -101,7 +101,6 @@ foreach ($cookie in $conf.cookies) {
 			Write-Host "[ERROR] Invalid cookie format: $cookie"
 			Continue
 		}
-	}
 	
 	$ltuid = $Matches.1
 	
