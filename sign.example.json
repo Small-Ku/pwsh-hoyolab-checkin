@@ -24,8 +24,12 @@
     }
   },
   "cookies": [
+	
     "mi18nLang=en-us; ltoken=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; ltuid=123456789;",
-    "mi18nLang=en-us; ltoken=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; ltuid=234567890;"
+    "mi18nLang=en-us; ltoken=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; ltuid=234567890;",
+	"mi18nLang=en-us; ltoken_v2=v2_ccccccccccccc; ltuid_v2=345678901; ltmid_v2=abcdefghijklm;"
+	"mi18nLang=en-us; ltoken_v2=v2_ddddddddddddd; ltuid_v2=456789012; ltmid_v2=nopqrstuvwxyz;"
+	
   ],
   "lang": "en-us",
   "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
