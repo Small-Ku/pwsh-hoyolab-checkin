@@ -26,9 +26,7 @@
   "cookies": [
 	
     "mi18nLang=en-us; ltoken=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; ltuid=123456789;",
-    "mi18nLang=en-us; ltoken=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; ltuid=234567890;",
-	"mi18nLang=en-us; ltoken_v2=v2_ccccccccccccc; ltuid_v2=345678901; ltmid_v2=abcdefghijklm;"
-	"mi18nLang=en-us; ltoken_v2=v2_ddddddddddddd; ltuid_v2=456789012; ltmid_v2=nopqrstuvwxyz;"
+	"mi18nLang=en-us; ltoken_v2=v2_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP; ltuid_v2=345678901; ltmid_v2=abcdefghijklm;"
 	
   ],
   "lang": "en-us",
