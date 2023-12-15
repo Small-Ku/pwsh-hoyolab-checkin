@@ -221,10 +221,7 @@ foreach ($cookie in $conf.cookies) {
 		# Warn about difference between new and old check-in when reuse message in Discord
 		$old_checkin_date = ''
 		if ($dc_webhook -and $dc_reuse) {
-			if ($discord_embed[$discord_embed_index].title -ne $game.name) {
-				Write-Host '[WARN] Old game name' $discord_embed[$discord_embed_index].title 'not match with new:' $game.name
-			}
-			if ($discord_embed[$discord_embed_index].footer.text -match '^(?<date>\d{4}-\d{2}-\d{2})\s\|\s(?<name>\w\*{4}.+)') {
+			if ($discord_embed[$discord_embed_index].footer.text -match '^(?<date>\d{4}-\d{2}-\d{2})\s\|\s(?<name>.+\*{4}.+)$') {
 				$old_checkin_date = $Matches.date
 				$old_display_name = $Matches.name
 				if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
