@@ -139,21 +139,22 @@ foreach ($cookie in $conf.cookies) {
 		Write-Host
 		Write-Host '[DEBUG] Account info:' $ret_ac_info 'data:' $ret_ac_info.data
 	}
+	$display_name = ''
 	if ($ret_ac_info.retcode -eq -0) {
-		if ($conf.display.account_info.name) {
-			$display_name = "$($ret_ac_info.data.account_name)"
+		if ($conf.display.account_info.name -and $ret_ac_info.data.account_name) {
+			$display_name = $ret_ac_info.data.account_name
 		}
-		if ($conf.display.account_info.id) {
-			$display_name += "($($ret_ac_info.data.account_id))"
+		elseif ($conf.display.account_info.email -and $ret_ac_info.data.email) {
+			$display_name = $ret_ac_info.data.email
 		}
-		if ($conf.display.account_info.email) {
-			$display_name += "($($ret_ac_info.data.email))"
+		elseif ($conf.display.account_info.id -and $ret_ac_info.data.account_id) {
+			$display_name = $ret_ac_info.data.account_id
 		}
-		if ($conf.display.account_info.phone) {
-			$display_name += "($($ret_ac_info.data.mobile))"
+		elseif ($conf.display.account_info.phone -and $ret_ac_info.data.mobile) {
+			$display_name = $ret_ac_info.data.mobile
 		}
 	}
-	else {
+	if ($display_name -eq '') {
 		$display_name = $ltuid
 	}
 	
