@@ -370,7 +370,7 @@ if ($dc_webhook -and $discord_embed.Count) {
 	}
 	if ($conf.display.discord.reuse_msg) {
 		if ($conf.display.discord.reuse_msg -match '^\d{18,}$') {
-			$ret_discord = Invoke-RestMethod -Method 'Patch' -Uri "$($conf.display.discord.webhook_url)/messages/$($conf.display.discord.reuse_msg)" -Body $discord_body_json -ContentType 'application/json;charset=UTF-8'
+			$ret_discord = Invoke-WebRequest -Method 'Patch' -Uri "$($conf.display.discord.webhook_url)/messages/$($conf.display.discord.reuse_msg)" -Body $discord_body_json -ContentType 'application/json;charset=UTF-8'
 		}
 		else {
 			$ret_discord = Invoke-RestMethod -Method 'Post' -Uri ($conf.display.discord.webhook_url + '?wait=true') -Body $discord_body_json -ContentType 'application/json;charset=UTF-8'
