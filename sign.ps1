@@ -155,7 +155,7 @@ foreach ($cookie in $conf.cookies) {
 		}
 	}
 	if ($display_name -eq '') {
-		$display_name = $ltuid
+		$display_name = $ltuid -replace '^(\d{2})\d+(\d{2})$', '$1****$2'
 	}
 	
 	foreach ($game in $conf.games) {
