@@ -79,7 +79,7 @@ if ($dc_webhook) {
 			$discord_embed = $ret_discord.embeds
 		}
 		else {
-			$conf.display.discord.reuse_msg = true
+			$conf.display.discord.reuse_msg = "true"
 			Write-Host '[WARN] Config has been changed. Will not re-use the previous message.'
 		}
 	}
