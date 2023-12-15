@@ -47,6 +47,12 @@ $user_agent = $conf.user_agent
 
 $debugging = $env:debug -eq 'pwsh-hoyolab-checkin'
 $dc_webhook = $conf.display.discord.webhook_url -ne ''
+$dc_reuse = $conf.display.discord.reuse_msg -and $conf.display.discord.reuse_msg -match '^(\d{18,})(len\d+)?$'
+$dc_reuse_id = $Matches.1
+$dc_reuse_len = $Matches.2
+if ($dc_reuse_len) {
+	$dc_reuse_len = $dc_reuse_len.TrimStart('len')
+}
 $discord_embed_index = -1
 
 if ($dc_webhook) {
@@ -70,16 +76,16 @@ if ($dc_webhook) {
 			Write-Host "[DEBUG] ID that will be ping: " $discord_ping
 		}
 	}
-	if ($conf.display.discord.reuse_msg -and $conf.display.discord.reuse_msg -match '^\d{18,}$') {
-		$ret_discord = Invoke-RestMethod -Method 'Get' -Uri "$($conf.display.discord.webhook_url)/messages/$($conf.display.discord.reuse_msg)" -ContentType 'application/json;charset=UTF-8'
+	if ($dc_reuse) {
+		$ret_discord = Invoke-RestMethod -Method 'Get' -Uri "$($conf.display.discord.webhook_url)/messages/$dc_reuse_id" -ContentType 'application/json;charset=UTF-8'
 		if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
-			Write-Host "[DEBUG] Previous message to be reused:`n" ( $ret_discord.embeds | ConvertTo-Json -Depth 10 ) # avoid id outputs
+			Write-Host "[DEBUG] Previous message to be reused:`nEmbed length: $($ret_discord.embeds.Length) (expect: $dc_reuse_len)`n" ( $ret_discord.embeds | ConvertTo-Json -Depth 10 ) # avoid id outputs
 		}
-		if ($ret_discord.embeds.Length -eq ($conf.cookies.Length * $conf.games.Length)) {
+		if ($ret_discord.embeds.Length -eq $dc_reuse_len) {
 			$discord_embed = $ret_discord.embeds
 		}
 		else {
-			$conf.display.discord.reuse_msg = "true"
+			$dc_reuse_id = "true"
 			Write-Host '[WARN] Config has been changed. Will not re-use the previous message.'
 		}
 	}
@@ -213,7 +219,7 @@ foreach ($cookie in $conf.cookies) {
 		
 		# Warn about difference between new and old check-in when reuse message in Discord
 		$old_checkin_date = ''
-		if ($dc_webhook -and $conf.display.discord.reuse_msg -and $conf.display.discord.reuse_msg -match '^\d{18,}$') {
+		if ($dc_webhook -and $dc_reuse) {
 			if ($discord_embed[$discord_embed_index].title -ne $game.name) {
 				Write-Host '[WARN] Old game name' $discord_embed[$discord_embed_index].title 'not match with new:' $game.name
 			}
@@ -233,15 +239,20 @@ foreach ($cookie in $conf.cookies) {
 		}
 
 		# Already checked-in in the same day
-		if ($ret_info.data.is_sign) {
+		# No account created
+		if ($ret_info.data.is_sign -or $ret_sign.retcode -eq -10002) {
 			$msg = Format-Text -Text $ret_sign.message
 			if ($conf.display.console -or $debugging) {
 				Write-Host "[INFO] [$display_name] $msg"
 			}
+			if ($ret_sign.retcode -eq -10002) {
+				$discord_embed_index -= 1
+				Continue
+			}
 			# Check if not reusing message or previous content is outdated
 			if ($old_checkin_date -eq '' -or $old_checkin_date -eq $ret_info.data.today) {
 				# No overwrite on old message
-				if ($dc_webhook -and (-not $conf.display.discord.reuse_msg -or $conf.display.discord.reuse_msg -notmatch '^\d{18,}$')) {
+				if ($dc_webhook -and -not $dc_reuse) {
 					$new_embed = @{
 						'title'       = $game.name
 						'description' = $msg
@@ -276,7 +287,7 @@ foreach ($cookie in $conf.cookies) {
 					Write-Host "[DEBUG] Adding embed:`n" ( $new_embed | ConvertTo-Json -Depth 2 )
 				}
 				# Overwrite old embed when reuse message
-				if ($conf.display.discord.reuse_msg -and $conf.display.discord.reuse_msg -match '^\d{18,}$') {
+				if ($dc_reuse_id -match '^\d{18,}$') {
 					$discord_embed[$discord_embed_index] = $new_embed
 				}
 				# Create new embed in new message
@@ -342,7 +353,7 @@ foreach ($cookie in $conf.cookies) {
 				Write-Host "[DEBUG] Adding embed:`n" ( $new_embed | ConvertTo-Json -Depth 2 )
 			}
 			# Overwrite old embed when reuse message
-			if ($conf.display.discord.reuse_msg -and $conf.display.discord.reuse_msg -match '^\d{18,}$') {
+			if (($dc_reuse_id -match '^\d{18,}$')) {
 				$discord_embed[$discord_embed_index] = $new_embed
 			}
 			# Create new embed in new message
@@ -366,15 +377,15 @@ if ($dc_webhook -and $discord_embed.Count) {
 	}
 	$discord_body_json = $discord_body | ConvertTo-Json -Depth 10
 	if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
-		Write-Host "[DEBUG] Discord message body:`n" $discord_body
+		Write-Host "[DEBUG] Discord message body:`n" $discord_body_json
 	}
-	if ($conf.display.discord.reuse_msg) {
-		if ($conf.display.discord.reuse_msg -match '^\d{18,}$') {
-			$ret_discord = Invoke-WebRequest -Method 'Patch' -Uri "$($conf.display.discord.webhook_url)/messages/$($conf.display.discord.reuse_msg)" -Body $discord_body_json -ContentType 'application/json;charset=UTF-8'
+	if ($dc_reuse) {
+		if ($dc_reuse_id -match '^\d{18,}$') {
+			$ret_discord = Invoke-WebRequest -Method 'Patch' -Uri "$($conf.display.discord.webhook_url)/messages/$dc_reuse_id" -Body $discord_body_json -ContentType 'application/json;charset=UTF-8'
 		}
 		else {
 			$ret_discord = Invoke-RestMethod -Method 'Post' -Uri ($conf.display.discord.webhook_url + '?wait=true') -Body $discord_body_json -ContentType 'application/json;charset=UTF-8'
-			$conf.display.discord.reuse_msg = $ret_discord.id
+			$conf.display.discord.reuse_msg = "$($ret_discord.id)len$($discord_body.embeds.Length)"
 			$conf | ConvertTo-Json -Depth 10 | Set-Content .\sign.json -Encoding 'UTF8'
 		}
 	}
@@ -384,8 +395,8 @@ if ($dc_webhook -and $discord_embed.Count) {
 	if ($discord_need_ping) {
 		$discord_body.content = $discord_ping
 		$discord_body.embeds = $null
-		$discord_body = $discord_body | ConvertTo-Json -Depth 10
-		$ret_discord = Invoke-RestMethod -Method 'Post' -Uri $conf.display.discord.webhook_url -Body $discord_body -ContentType 'application/json;charset=UTF-8'
+		$discord_body_json = $discord_body | ConvertTo-Json -Depth 10
+		$ret_discord = Invoke-RestMethod -Method 'Post' -Uri $conf.display.discord.webhook_url -Body $discord_body_json -ContentType 'application/json;charset=UTF-8'
 	}
 }
 
