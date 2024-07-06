@@ -91,7 +91,7 @@ if ($dc_webhook) {
 foreach ($cookie in $conf.cookies) {
 	# Basic check if cookie valid
 	if ($cookie -like "*ltoken_v2=*") {
-		if (-not(($cookie -match 'ltoken_v2=v2_[a-zA-Z0-9]{114}') -and ($cookie -match 'ltmid_v2=[0-9a-zA-Z_]{13}') -and ($cookie -match 'ltuid_v2=(\d+)'))) {
+		if (-not(($cookie -match 'ltoken_v2=v2_[^\s;]{114,}') -and ($cookie -match 'ltuid_v2=(\d+)'))) {
 			Write-Host "[ERROR] Invalid cookie format: $cookie"
 			Continue
 		}
@@ -162,9 +162,11 @@ foreach ($cookie in $conf.cookies) {
 		$discord_embed[-1].title = $display_name -replace '\*', '\*'
 	}
  else {
-	$discord_need_ping = $true
-		$discord_embed[-1].color = '16711680'
-		$discord_embed[-1].description = $ret_ac_info.message
+		if ($dc_webhook) {
+			$discord_need_ping = $true
+			$discord_embed[-1].color = '16711680'
+			$discord_embed[-1].description = $ret_ac_info.message
+		}
 		Continue
 	}
 	
@@ -206,6 +208,10 @@ foreach ($cookie in $conf.cookies) {
 			if ($conf.display.console -or $debugging) {
 				Write-Host "[ERROR] Invalid cookie: $ltuid ($ret_info)"
 			}
+			if ($dc_webhook) {
+				$discord_embed[-1].color = '16711680'
+				$discord_embed[-1].description = Format-Text -Text $ret_info.message
+			}
 			Continue
 		}
 
@@ -223,6 +229,10 @@ foreach ($cookie in $conf.cookies) {
 		if ($ret_sign.retcode -eq -100) {
 			if ($conf.display.console -or $debugging) {
 				Write-Host "[ERROR] Invalid cookie: $ltuid ($ret_sign)"
+			}
+			if ($dc_webhook) {
+				$discord_embed[-1].color = '16711680'
+				$discord_embed[-1].description = Format-Text -Text $ret_sign.message
 			}
 			Continue
 		}
@@ -284,6 +294,10 @@ foreach ($cookie in $conf.cookies) {
 			if ($conf.display.console -or $debugging) {
 				Write-Host "[ERROR] Invalid cookie format: $cookie"
 			}
+			if ($dc_webhook) {
+				$discord_embed[-1].color = '16711680'
+				$discord_embed[-1].description = Format-Text -Text $ret_reward.message
+			}
 			Continue
 		}
 
@@ -298,7 +312,8 @@ foreach ($cookie in $conf.cookies) {
 				'value'  = $(if ($conf.display.discord.text.minimal) {
 						"$($ret_info.data.today) ($($ret_info.data.total_sign_day))
 						$reward_name x$($current_reward.cnt)"
-					} else { 
+					}
+					else { 
 						"$($ret_info.data.today)
 						**$($conf.display.discord.text.total_sign_day)**
 						$($ret_info.data.total_sign_day)$($conf.display.discord.text.total_sign_day_unit)
