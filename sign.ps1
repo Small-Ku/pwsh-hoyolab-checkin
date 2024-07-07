@@ -89,14 +89,26 @@ if ($dc_webhook) {
 ####################
 
 foreach ($cookie in $conf.cookies) {
+	if ($dc_webhook) {
+		$discord_embed += @{
+			'color'       = '16711680'
+			'title'       = "ERROR"
+			'description' = "Unknown error. Maybe invalid cookie."
+			'fields'      = @()
+		}
+		if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
+			Write-Host "[DEBUG] Adding embed:`n" ( $discord_embed[-1] | ConvertTo-Json -Depth 2 )
+		}
+	}
+
 	# Basic check if cookie valid
 	if ($cookie -like "*ltoken_v2=*") {
-		if (-not(($cookie -match 'ltoken_v2=v2_[^\s;]{114,}') -and ($cookie -match 'ltuid_v2=(\d+)'))) {
+		if (-not(($cookie -match 'ltoken_v2=v2_[^\s;]{114,}') -and ($cookie -match 'ltmid_v2=[0-9a-zA-Z_]{13}') -and ($cookie -match 'ltuid_v2=(\d+)'))) {
 			Write-Host "[ERROR] Invalid cookie format: $cookie"
 			Continue
 		}
 	}
- else {
+	else {
 		if (-not(($cookie -match 'ltoken=[0-9a-zA-Z]{40}') -and ($cookie -match 'ltuid=(\d+)'))) {
 			Write-Host "[ERROR] Invalid cookie format: $cookie"
 			Continue
@@ -105,17 +117,7 @@ foreach ($cookie in $conf.cookies) {
 	
 	$ltuid = $Matches.1
 	$display_name = $ltuid -replace '^(\d{2})\d+(\d{2})$', '$1****$2'
-	
-	if ($dc_webhook) {
-		$discord_embed += @{
-			'title'  = $display_name -replace '\*', '\*'
-			'fields' = @()
-			'color'  = '5635840'
-		}
-		if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
-			Write-Host "[DEBUG] Adding embed:`n" ( $discord_embed[-1] | ConvertTo-Json -Depth 2 )
-		}
-	}
+	$discord_embed[-1].title = $display_name -replace '\*', '\*'
 	
 	# Cookies setup
 	$jar = @{}
@@ -161,14 +163,15 @@ foreach ($cookie in $conf.cookies) {
 		}
 		$discord_embed[-1].title = $display_name -replace '\*', '\*'
 	}
- else {
+	else {
 		if ($dc_webhook) {
 			$discord_need_ping = $true
-			$discord_embed[-1].color = '16711680'
 			$discord_embed[-1].description = $ret_ac_info.message
 		}
 		Continue
 	}
+	
+	if ($dc_webhook) { $discord_embed[-1].description = '' }
 	
 	foreach ($game in $conf.games) {
 		if ($debugging) {
@@ -209,8 +212,11 @@ foreach ($cookie in $conf.cookies) {
 				Write-Host "[ERROR] Invalid cookie: $ltuid ($ret_info)"
 			}
 			if ($dc_webhook) {
-				$discord_embed[-1].color = '16711680'
-				$discord_embed[-1].description = Format-Text -Text $ret_info.message
+				$discord_embed[-1].fields += @{
+					'name'   = $game.name
+					'value'  = Format-Text -Text $ret_info.message
+					'inline' = $true
+				}
 			}
 			Continue
 		}
@@ -231,8 +237,11 @@ foreach ($cookie in $conf.cookies) {
 				Write-Host "[ERROR] Invalid cookie: $ltuid ($ret_sign)"
 			}
 			if ($dc_webhook) {
-				$discord_embed[-1].color = '16711680'
-				$discord_embed[-1].description = Format-Text -Text $ret_sign.message
+				$discord_embed[-1].fields += @{
+					'name'   = $game.name
+					'value'  = Format-Text -Text $ret_sign.message
+					'inline' = $true
+				}
 			}
 			Continue
 		}
@@ -249,7 +258,6 @@ foreach ($cookie in $conf.cookies) {
 			}
 			# No overwrite on old message
 			if ($dc_webhook -and -not $dc_reuse) {
-				$discord_embed[-1].color = '16711680'
 				$discord_embed[-1].fields += @{
 					'name'   = $game.name
 					'value'  = $msg
@@ -264,7 +272,6 @@ foreach ($cookie in $conf.cookies) {
 			}
 			if ($dc_webhook) {
 				$discord_need_ping = $true
-				$discord_embed[-1].color = '16711680'
 				$discord_embed[-1].fields += @{
 					'name'   = $game.name
 					'value'  = $conf.display.discord.text.need_captcha
@@ -295,7 +302,6 @@ foreach ($cookie in $conf.cookies) {
 				Write-Host "[ERROR] Invalid cookie format: $cookie"
 			}
 			if ($dc_webhook) {
-				$discord_embed[-1].color = '16711680'
 				$discord_embed[-1].description = Format-Text -Text $ret_reward.message
 			}
 			Continue
@@ -307,6 +313,7 @@ foreach ($cookie in $conf.cookies) {
 			Write-Host "[INFO] [$display_name] $reward_name x$($current_reward.cnt)"
 		}
 		if ($dc_webhook) {
+			$discord_embed[-1].color = '5635840'
 			$discord_embed[-1].fields += @{
 				'name'   = $game.name
 				'value'  = $(if ($conf.display.discord.text.minimal) {
