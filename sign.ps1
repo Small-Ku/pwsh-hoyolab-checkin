@@ -114,11 +114,11 @@ foreach ($cookie in $conf.cookies) {
 			Continue
 		}
 	}
-	
+
 	$ltuid = $Matches.1
 	$display_name = $ltuid -replace '^(\d{2})\d+(\d{2})$', '$1****$2'
 	$discord_embed[-1].title = $display_name -replace '\*', '\*'
-	
+
 	# Cookies setup
 	$jar = @{}
 	foreach ($c in ($cookie -split ';')) {
@@ -128,7 +128,7 @@ foreach ($cookie in $conf.cookies) {
 			$jar[$c_pair[0]] = $c_pair[1]
 		}
 	}
-	
+
 	# Get account info
 	$session = New-WebSession -Cookies $jar -For 'https://api-account-os.hoyolab.com'
 	$headers = @{
@@ -170,9 +170,9 @@ foreach ($cookie in $conf.cookies) {
 		}
 		Continue
 	}
-	
+
 	if ($dc_webhook) { $discord_embed[-1].description = '' }
-	
+
 	foreach ($game in $conf.games) {
 		if ($debugging) {
 			Write-Host
@@ -200,6 +200,9 @@ foreach ($cookie in $conf.cookies) {
 			'sec-ch-ua-mobile'  = '?0'
 			'Origin'            = $game.origin_url
 			'Referer'           = $game.referer_url
+		}
+		if ($game.custom_headers) {
+			$game.custom_headers.psobject.properties | Foreach { $headers[$_.Name] = $_.Value }
 		}
 
 		# Query info about check-in
@@ -244,6 +247,53 @@ foreach ($cookie in $conf.cookies) {
 				}
 			}
 			Continue
+		}
+
+		# Resign
+		if ($ret_info.data.sign_cnt_missed -gt 0) {
+			# Complete tasks
+			$api_tasks_url = "$base_url/event/$($game.game_id)/task/list?act_id=$act_id&lang=$lang"
+			$api_task_complete_url = "$base_url/event/$($game.game_id)/task/complete"
+			$api_task_award_url = "$base_url/event/$($game.game_id)/task/award"
+
+			$ret_tasks = Invoke-RestMethod -Method 'Get' -Uri $api_tasks_url -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
+			if ($debugging) {
+				Write-Host '[DEBUG] Queried resign tasks info:' $ret_tasks 'data:' $ret_tasks.data
+			}
+
+			foreach ($task in $ret_tasks.data.list) {
+				if ($task.status -eq "TT_Award") { Continue }
+				$body = @{
+					"id" = $task.id
+					"lang" = $lang
+					"act_id" = $act_id
+				} | ConvertTo-Json
+				$ret_complete = Invoke-RestMethod -Method 'Post' -Uri $api_task_complete_url -Headers $headers -Body $body -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
+				$ret_award = Invoke-RestMethod -Method 'Post' -Uri $api_task_award_url -Headers $headers -Body $body -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
+				if ($debugging) {
+					Write-Host "[DEBUG] Queried resign task $($task.id) complete info:" $ret_complete 'data:' $ret_complete.data
+					Write-Host "[DEBUG] Queried resign task $($task.id) award info:" $ret_award 'data:' $ret_award.data
+				}
+			}
+
+			# Request resign
+			$api_resign_info_url = "$base_url/event/$($game.game_id)/resign_info?act_id=$act_id&lang=$lang"
+			$api_resign_url = "$base_url/event/$($game.game_id)/resign"
+
+			$ret_resign_info = Invoke-RestMethod -Method 'Get' -Uri $api_resign_info_url -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
+			if ($debugging) {
+				Write-Host '[DEBUG] Queried resign info:' $ret_resign_info 'data:' $ret_resign_info.data
+			}
+			if (($ret_resign_info.data.resign_cnt_monthly -lt $ret_resign_info.data.resign_limit_monthly) -and ($ret_resign_info.data.resign_cnt_daily -lt $ret_resign_info.data.resign_limit_daily)) {
+				$body = @{
+					"act_id" = $act_id
+					"lang" = $lang
+				} | ConvertTo-Json
+				$ret_resign = Invoke-RestMethod -Method 'Post' -Uri $api_resign_url -Headers $headers -Body $body -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
+				if ($debugging) {
+					Write-Host '[DEBUG] Resign:' $ret_resign 'data:' $ret_resign.data
+				}
+			}
 		}
 
 		# Already checked-in in the same day

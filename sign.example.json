@@ -53,7 +53,8 @@
       "domain": "sg-act-nap-api.hoyolab.com",
       "origin_url": "https://act.hoyolab.com/",
       "referer_url": "https://act.hoyolab.com/",
-      "game_id": "luna/zzz/os"
+      "game_id": "luna/zzz/os",
+      "custom_headers": { "x-rpc-signgame": "zzz" }
     }
   ]
 }
