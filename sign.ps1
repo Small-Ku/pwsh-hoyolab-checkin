@@ -1,6 +1,7 @@
 ####################
-# Functions
+# Utilities
 ####################
+
 function New-WebSession {
 	# From https://stackoverflow.com/questions/69519695
 	param(
@@ -29,6 +30,8 @@ function Format-Text {
 		[String]$Text
 	)
 
+	if ($null -eq $Text) { return "" }
+
 	if ($PSVersionTable.PSVersion.Major -le 5) {
 		$bytes = [System.Text.Encoding]::GetEncoding('ISO-8859-1').GetBytes($Text)
 		return [System.Text.Encoding]::UTF8.GetString($bytes)
@@ -37,91 +40,159 @@ function Format-Text {
 	return $Text
 }
 
-####################
-# Configs
-####################
+function Write-Log {
+	param(
+		[Parameter(Mandatory = $true)]
+		[ValidateSet('INFO', 'WARN', 'ERROR', 'DEBUG')]
+		[String]$Level,
+		[Parameter(Mandatory = $true)]
+		[String]$Message
+	)
 
-$conf = Get-Content .\sign.json -Raw -Encoding 'UTF8' | ConvertFrom-Json
-$lang = $conf.lang
-$user_agent = $conf.user_agent
-
-$debugging = $env:debug -eq 'pwsh-hoyolab-checkin'
-$dc_webhook = $conf.display.discord.webhook_url -ne ''
-$dc_reuse = $conf.display.discord.reuse_msg -and $conf.display.discord.reuse_msg -match '^(\d{18,})(len\d+)?$'
-$dc_reuse_id = $Matches.1
-$conf.display.discord.reuse_msg = $dc_reuse_id
-
-if ($dc_webhook) {
-	if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
-		Write-Host '[DEBUG] Webhook as' $conf.display.discord.username
+	$color = switch ($Level) {
+		'INFO' { 'Cyan' }
+		'WARN' { 'Yellow' }
+		'ERROR' { 'Red' }
+		'DEBUG' { 'Gray' }
 	}
-	$discord_embed = @()
-	if ($conf.display.discord.ping) {
-		$discord_need_ping = $false
-		$discord_ping = ""
-		if ($conf.display.discord.ping.user) {
-			$discord_ping += "<@" + ($conf.display.discord.ping.user -join "> <@") + ">"
-		}
-		if ($conf.display.discord.ping.user -and $conf.display.discord.ping.role) {
-			$discord_ping += " "
-		}
-		if ($conf.display.discord.ping.role) {
-			$discord_ping += "<@&" + ($conf.display.discord.ping.role -join "> <@&") + ">"
-		}
-		if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
-			Write-Host "[DEBUG] ID that will be ping: " $discord_ping
+
+	if ($Level -eq 'DEBUG' -and -not $global:debugging) { return }
+	if ($null -ne $conf -and -not $conf.display.console) { return }
+
+	Write-Host "[$Level] $Message" -ForegroundColor $color
+}
+
+####################
+# Discord
+####################
+
+function Get-DiscordPing {
+	param($PingConfig)
+	if (-not $PingConfig) { return "" }
+
+	$ping = ""
+	if ($PingConfig.user) {
+		$ping += "<@" + ($PingConfig.user -join "> <@") + ">"
+	}
+	if ($PingConfig.user -and $PingConfig.role) {
+		$ping += " "
+	}
+	if ($PingConfig.role) {
+		$ping += "<@&" + ($PingConfig.role -join "> <@&") + ">"
+	}
+	return $ping
+}
+
+function Initialize-DiscordEmbed {
+	return @{
+		'color'       = '16711680' # Default to Red (Error)
+		'title'       = "ERROR"
+		'description' = "Unknown error. Maybe invalid cookie."
+		'fields'      = @()
+	}
+}
+
+function Send-DiscordNotification {
+	param(
+		$Config,
+		$Embeds,
+		$NeedPing,
+		$PingString
+	)
+
+	if (-not $Config.display.discord.webhook_url) { return }
+
+	$discord_body = @{
+		'content' = ''
+		'embeds'  = $Embeds
+	}
+	if ($Config.display.discord.username) { $discord_body.username = $Config.display.discord.username }
+	if ($Config.display.discord.avatar_url) { $discord_body.avatar_url = $Config.display.discord.avatar_url }
+
+	$discord_body_json = $discord_body | ConvertTo-Json -Depth 10
+
+	Write-Log -Level 'DEBUG' -Message "Discord message body:`n$discord_body_json"
+
+	$reuse_id = $Config.display.discord.reuse_msg
+	if ($reuse_id -and $reuse_id -match '^\d{18,}$') {
+		$uri = "$($Config.display.discord.webhook_url)/messages/$reuse_id"
+		$ret = Invoke-WebRequest -Method 'Patch' -Uri $uri -Body $discord_body_json -ContentType 'application/json;charset=UTF-8'
+	}
+	else {
+		$uri = $Config.display.discord.webhook_url + '?wait=true'
+		$ret = Invoke-RestMethod -Method 'Post' -Uri $uri -Body $discord_body_json -ContentType 'application/json;charset=UTF-8'
+		if ($Config.display.discord.reuse_msg -eq 'true' -or $Config.display.discord.reuse_msg -eq $true) {
+			$Config.display.discord.reuse_msg = $ret.id
+			$Config | ConvertTo-Json -Depth 10 | Set-Content .\sign.json -Encoding 'UTF8'
 		}
 	}
-	if ($dc_reuse) {
-		$ret_discord = Invoke-RestMethod -Method 'Get' -Uri "$($conf.display.discord.webhook_url)/messages/$dc_reuse_id" -ContentType 'application/json;charset=UTF-8'
-		if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
-			Write-Host "[DEBUG] Previous message to be reused:`nEmbed length: $($ret_discord.embeds.Length) (expect: $($conf.cookies.Length))`n" ( $ret_discord.embeds | ConvertTo-Json -Depth 10 ) # avoid id outputs
-		}
-		if ($ret_discord.embeds.Length -ne $conf.cookies.Length) {
-			$dc_reuse_id = "true"
-			Write-Host '[WARN] Config has been changed. Will not re-use the previous message.'
-		}
+
+	if ($NeedPing) {
+		$ping_body = @{ 'content' = $PingString } | ConvertTo-Json
+		Invoke-RestMethod -Method 'Post' -Uri $Config.display.discord.webhook_url -Body $ping_body -ContentType 'application/json;charset=UTF-8'
 	}
 }
 
 ####################
-# Main
+# HoYoLAB
 ####################
 
-foreach ($cookie in $conf.cookies) {
-	if ($dc_webhook) {
-		$discord_embed += @{
-			'color'       = '16711680'
-			'title'       = "ERROR"
-			'description' = "Unknown error. Maybe invalid cookie."
-			'fields'      = @()
-		}
-		if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
-			Write-Host "[DEBUG] Adding embed:`n" ( $discord_embed[-1] | ConvertTo-Json -Depth 2 )
-		}
-	}
-
-	# Basic check if cookie valid
-	if ($cookie -like "*ltoken_v2=*") {
-		if (-not(($cookie -match 'ltoken_v2=v2_[^\s;]{114,}') -and ($cookie -match 'ltmid_v2=[0-9a-zA-Z_]{13}') -and ($cookie -match 'ltuid_v2=(\d+)'))) {
-			Write-Host "[ERROR] Invalid cookie format: $cookie"
-			Continue
-		}
+function Test-HoyolabCookie {
+	param($CookieString)
+	if ($CookieString -like "*ltoken_v2=*") {
+		return (($CookieString -match 'ltoken_v2=v2_[^\s;]{114,}') -and ($CookieString -match 'ltmid_v2=[0-9a-zA-Z_]{13}') -and ($CookieString -match 'ltuid_v2=(\d+)'))
 	}
 	else {
-		if (-not(($cookie -match 'ltoken=[0-9a-zA-Z]{40}') -and ($cookie -match 'ltuid=(\d+)'))) {
-			Write-Host "[ERROR] Invalid cookie format: $cookie"
-			Continue
-		}
+		return (($CookieString -match 'ltoken=[0-9a-zA-Z]{40}') -and ($CookieString -match 'ltuid=(\d+)'))
+	}
+}
+
+function Get-HoyolabAccountInfo {
+	param($Cookies, $UserAgent, $Config)
+
+	$session = New-WebSession -Cookies $Cookies -For 'https://api-account-os.hoyolab.com'
+	$headers = @{
+		'Accept'          = 'application/json, text/plain, */*'
+		'Accept-Language' = 'en-US,en;q=0.9'
+		'Origin'          = 'https://act.hoyolab.com'
+		'Referer'         = 'https://act.hoyolab.com/'
+		'Sec-Fetch-Site'  = 'same-site'
+		'Sec-Fetch-Mode'  = 'cors'
+		'Sec-Fetch-Dest'  = 'empty'
+	}
+	$uri = 'https://api-account-os.hoyolab.com/auth/api/getUserAccountInfoByLToken'
+	$ret = Invoke-RestMethod -Method 'Get' -Uri $uri -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $UserAgent -WebSession $session
+
+	Write-Log -Level 'DEBUG' -Message "Account info: $ret data: $($ret.data)"
+
+	if ($ret.retcode -eq 0) {
+		$display_name = ''
+		if ($Config.display.account_info.name -and $ret.data.account_name) { $display_name = $ret.data.account_name }
+		elseif ($Config.display.account_info.email -and $ret.data.email) { $display_name = $ret.data.email }
+		elseif ($Config.display.account_info.id -and $ret.data.account_id) { $display_name = $ret.data.account_id }
+		elseif ($Config.display.account_info.phone -and $ret.data.mobile) { $display_name = $ret.data.mobile }
+
+		return @{ Success = $true; DisplayName = $display_name }
+	}
+
+	return @{ Success = $false; Message = $ret.message }
+}
+
+function Invoke-HoyolabCheckin {
+	param($Cookie, $Config, $Embed)
+
+	if (-not (Test-HoyolabCookie -CookieString $Cookie)) {
+		Write-Log -Level 'ERROR' -Message "Invalid cookie format: $Cookie"
+		return $null
 	}
 
 	$ltuid = $Matches.1
 	$display_name = $ltuid -replace '^(\d{2})\d+(\d{2})$', '$1****$2'
-	$discord_embed[-1].title = $display_name -replace '\*', '\*'
+	$Embed.title = $display_name -replace '\*', '\*'
 
-	# Cookies setup
+	# Parse cookies into jar
 	$jar = @{}
-	foreach ($c in ($cookie -split ';')) {
+	foreach ($c in ($Cookie -split ';')) {
 		$c = $c.Trim()
 		if ($c) {
 			$c_pair = $c -split '=', 2
@@ -129,65 +200,26 @@ foreach ($cookie in $conf.cookies) {
 		}
 	}
 
-	# Get account info
-	$session = New-WebSession -Cookies $jar -For 'https://api-account-os.hoyolab.com'
-	$headers = @{
-		'Accept'           = 'application/json, text/plain, */*'
-		'Accept-Language'  = 'en-US,en;q=0.9'
-		'Origin'           = 'https://act.hoyolab.com'
-		'Referer'          = 'https://act.hoyolab.com/'
-		'sec-ch-ua'        = '" Not A;Brand";v="99", "Chromium";v="90", "Google Chrome";v="90"'
-		'sec-ch-ua-mobile' = '?0'
-		'Sec-Fetch-Site'   = 'same-site'
-		'Sec-Fetch-Mode'   = 'cors'
-		'Sec-Fetch-Dest'   = 'empty'
-	}
-	$ret_ac_info = Invoke-RestMethod -Method 'Get' -Uri 'https://api-account-os.hoyolab.com/auth/api/getUserAccountInfoByLToken' -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
-	if ($debugging) {
-		Write-Host
-		Write-Host '[DEBUG] Account info:' $ret_ac_info 'data:' $ret_ac_info.data
-	}
-	if ($ret_ac_info.retcode -eq -0) {
-		$display_name = ''
-		if ($conf.display.account_info.name -and $ret_ac_info.data.account_name) {
-			$display_name = $ret_ac_info.data.account_name
-		}
-		elseif ($conf.display.account_info.email -and $ret_ac_info.data.email) {
-			$display_name = $ret_ac_info.data.email
-		}
-		elseif ($conf.display.account_info.id -and $ret_ac_info.data.account_id) {
-			$display_name = $ret_ac_info.data.account_id
-		}
-		elseif ($conf.display.account_info.phone -and $ret_ac_info.data.mobile) {
-			$display_name = $ret_ac_info.data.mobile
-		}
-		$discord_embed[-1].title = $display_name -replace '\*', '\*'
+	# Get detailed account info
+	$ac_info = Get-HoyolabAccountInfo -Cookies $jar -UserAgent $Config.user_agent -Config $Config
+	if ($ac_info.Success) {
+		$display_name = $ac_info.DisplayName
+		$Embed.title = $display_name -replace '\*', '\*'
+		$Embed.description = ""
 	}
 	else {
-		if ($dc_webhook) {
-			$discord_need_ping = $true
-			$discord_embed[-1].description = $ret_ac_info.message
-		}
-		Continue
+		$Embed.description = $ac_info.Message
+		Write-Log -Level 'ERROR' -Message "Failed to get account info for ${ltuid}: $($ac_info.Message)"
+		return @{ NeedPing = $true }
 	}
 
-	if ($dc_webhook) { $discord_embed[-1].description = '' }
+	$any_ping = $false
+	foreach ($game in $Config.games) {
+		Write-Log -Level 'DEBUG' -Message "Signing for: $($game.name)"
 
-	foreach ($game in $conf.games) {
-		if ($debugging) {
-			Write-Host
-			Write-Host '[DEBUG] Signing for:' $game
-		}
-		# URL setup
 		$act_id = $game.act_id
 		$base_url = 'https://' + $game.domain
-		$api_reward_url = "$base_url/event/$($game.game_id)/home?lang=$lang&act_id=$act_id"
-		$api_info_url = "$base_url/event/$($game.game_id)/info?lang=$lang&act_id=$act_id"
-		$api_sign_url = "$base_url/event/$($game.game_id)/sign?lang=$lang"
-
-		# Web Session setup
-		$session = New-WebSession -Cookies $jar -For $base_url
-		$headers = @{
+		$api_headers = @{
 			'Accept'            = 'application/json, text/plain, */*'
 			'Accept-Encoding'   = 'gzip, deflate, br'
 			'Accept-Language'   = 'en-US,en;q=0.9'
@@ -202,224 +234,157 @@ foreach ($cookie in $conf.cookies) {
 			'Referer'           = $game.referer_url
 		}
 		if ($game.custom_headers) {
-			$game.custom_headers.psobject.properties | Foreach { $headers[$_.Name] = $_.Value }
+			$game.custom_headers.psobject.properties | Foreach { $api_headers[$_.Name] = $_.Value }
 		}
 
-		# Query info about check-in
-		$ret_info = Invoke-RestMethod -Method 'Get' -Uri $api_info_url -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
-		if ($debugging) {
-			Write-Host '[DEBUG] Queried info:' $ret_info 'data:' $ret_info.data
-		}
+		$session = New-WebSession -Cookies $jar -For $base_url
+
+		# 1. Get info
+		$api_info_url = "$base_url/event/$($game.game_id)/info?lang=$($Config.lang)&act_id=$act_id"
+		$ret_info = Invoke-RestMethod -Method 'Get' -Uri $api_info_url -Headers $api_headers -ContentType 'application/json;charset=UTF-8' -UserAgent $Config.user_agent -WebSession $session
+		Write-Log -Level 'DEBUG' -Message "Queried info: $ret_info data: $($ret_info.data)"
+
 		if ($ret_info.retcode -eq -100) {
-			if ($conf.display.console -or $debugging) {
-				Write-Host "[ERROR] Invalid cookie: $ltuid ($ret_info)"
-			}
-			if ($dc_webhook) {
-				$discord_embed[-1].fields += @{
-					'name'   = $game.name
-					'value'  = Format-Text -Text $ret_info.message
-					'inline' = $true
-				}
-			}
+			Write-Log -Level 'ERROR' -Message "Invalid cookie for $($game.name): $ltuid"
+			$Embed.fields += @{ 'name' = $game.name; 'value' = Format-Text -Text $ret_info.message; 'inline' = $true }
+			$any_ping = $true
 			Continue
 		}
 
-		# Request check-in
-		if ($conf.display.console -or $debugging) {
-			Write-Host "[INFO] Checking $display_name in for $($game.name)"
-		}
-		$sign_body = @{
-			'act_id' = $act_id
-		} | ConvertTo-Json
-		$ret_sign = Invoke-RestMethod -Method 'Post' -Uri $api_sign_url -Body $sign_body -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
-		if ($debugging) {
-			Write-Host '[DEBUG] Check-in:' $ret_sign 'data:' $ret_sign.data 'gt_result:' $ret_sign.data.gt_result
-		}
+		# 2. Perform sign-in
+		Write-Log -Level 'INFO' -Message "Checking $display_name in for $($game.name)"
+		$api_sign_url = "$base_url/event/$($game.game_id)/sign?lang=$($Config.lang)"
+		$sign_body = @{ 'act_id' = $act_id } | ConvertTo-Json
+		$ret_sign = Invoke-RestMethod -Method 'Post' -Uri $api_sign_url -Body $sign_body -Headers $api_headers -ContentType 'application/json;charset=UTF-8' -UserAgent $Config.user_agent -WebSession $session
+		Write-Log -Level 'DEBUG' -Message "Check-in result: $ret_sign"
+
 		if ($ret_sign.retcode -eq -100) {
-			if ($conf.display.console -or $debugging) {
-				Write-Host "[ERROR] Invalid cookie: $ltuid ($ret_sign)"
-			}
-			if ($dc_webhook) {
-				$discord_embed[-1].fields += @{
-					'name'   = $game.name
-					'value'  = Format-Text -Text $ret_sign.message
-					'inline' = $true
-				}
-			}
+			Write-Log -Level 'ERROR' -Message "Invalid cookie during sign for $($game.name): $ltuid"
+			$Embed.fields += @{ 'name' = $game.name; 'value' = Format-Text -Text $ret_sign.message; 'inline' = $true }
+			$any_ping = $true
 			Continue
 		}
 
-		# Resign
+		# 3. Handle Resign
 		if ($ret_info.data.sign_cnt_missed -gt 0) {
-			# Complete tasks
-			$api_tasks_url = "$base_url/event/$($game.game_id)/task/list?act_id=$act_id&lang=$lang"
-			$api_task_complete_url = "$base_url/event/$($game.game_id)/task/complete"
-			$api_task_award_url = "$base_url/event/$($game.game_id)/task/award"
-
-			$ret_tasks = Invoke-RestMethod -Method 'Get' -Uri $api_tasks_url -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
-			if ($debugging) {
-				Write-Host '[DEBUG] Queried resign tasks info:' $ret_tasks 'data:' $ret_tasks.data
-			}
-
-			foreach ($task in $ret_tasks.data.list) {
-				if ($task.status -eq "TT_Award") { Continue }
-				$body = @{
-					"id" = $task.id
-					"lang" = $lang
-					"act_id" = $act_id
-				} | ConvertTo-Json
-				$ret_complete = Invoke-RestMethod -Method 'Post' -Uri $api_task_complete_url -Headers $headers -Body $body -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
-				$ret_award = Invoke-RestMethod -Method 'Post' -Uri $api_task_award_url -Headers $headers -Body $body -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
-				if ($debugging) {
-					Write-Host "[DEBUG] Queried resign task $($task.id) complete info:" $ret_complete 'data:' $ret_complete.data
-					Write-Host "[DEBUG] Queried resign task $($task.id) award info:" $ret_award 'data:' $ret_award.data
-				}
-			}
-
-			# Request resign
-			$api_resign_info_url = "$base_url/event/$($game.game_id)/resign_info?act_id=$act_id&lang=$lang"
-			$api_resign_url = "$base_url/event/$($game.game_id)/resign"
-
-			$ret_resign_info = Invoke-RestMethod -Method 'Get' -Uri $api_resign_info_url -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
-			if ($debugging) {
-				Write-Host '[DEBUG] Queried resign info:' $ret_resign_info 'data:' $ret_resign_info.data
-			}
-			if (($ret_resign_info.data.resign_cnt_monthly -lt $ret_resign_info.data.resign_limit_monthly) -and ($ret_resign_info.data.resign_cnt_daily -lt $ret_resign_info.data.resign_limit_daily)) {
-				$body = @{
-					"act_id" = $act_id
-					"lang" = $lang
-				} | ConvertTo-Json
-				$ret_resign = Invoke-RestMethod -Method 'Post' -Uri $api_resign_url -Headers $headers -Body $body -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
-				if ($debugging) {
-					Write-Host '[DEBUG] Resign:' $ret_resign 'data:' $ret_resign.data
-				}
-			}
+			Invoke-HoyolabResign -BaseUrl $base_url -GameId $game.game_id -ActId $act_id -Headers $api_headers -Jar $jar -Config $Config
 		}
 
-		# Already checked-in in the same day
-		# No account created
-		if ($ret_info.data.is_sign -or $ret_sign.retcode -eq -10002) {
+		# 4. Process sign-in outcome
+		$is_already_signed = $ret_info.data.is_sign -or $ret_sign.retcode -eq -10002
+		if ($is_already_signed) {
 			$msg = Format-Text -Text $ret_sign.message
-			if ($conf.display.console -or $debugging) {
-				Write-Host "[INFO] [$display_name] $msg"
-			}
-			if ($ret_sign.retcode -eq -10002) {
-				Continue
-			}
-			# No overwrite on old message
-			if ($dc_webhook -and -not $dc_reuse) {
-				$discord_embed[-1].fields += @{
-					'name'   = $game.name
-					'value'  = $msg
-					'inline' = $true
-				}
+			Write-Log -Level 'INFO' -Message "[$display_name] $msg"
+			if ($ret_sign.retcode -eq -10002) { Continue }
+
+			# Only add to embed if not reusing message (to keep it clean)
+			if ($Config.display.discord.webhook_url -and -not ($Config.display.discord.reuse_msg -match '^\d{18,}$')) {
+				$Embed.fields += @{ 'name' = $game.name; 'value' = $msg; 'inline' = $true }
 			}
 		}
-		# Check if captcha needed
 		elseif ($ret_sign.data.gt_result -and -not ($ret_sign.data.gt_result.risk_code -eq 0 -and -not $ret_sign.data.gt_result.is_risk -and $ret_sign.data.gt_result.success -eq 0)) {
-			if ($conf.display.console -or $debugging) {
-				Write-Host "[ERROR] Captcha requested: $ltuid (" $ret_sign.data.gt_result ")"
-			}
-			if ($dc_webhook) {
-				$discord_need_ping = $true
-				$discord_embed[-1].fields += @{
-					'name'   = $game.name
-					'value'  = $conf.display.discord.text.need_captcha
-					'inline' = $true
-				}
-			}
+			Write-Log -Level 'ERROR' -Message "Captcha requested for $ltuid ($($game.name))"
+			$Embed.fields += @{ 'name' = $game.name; 'value' = $Config.display.discord.text.need_captcha; 'inline' = $true }
+			$any_ping = $true
 			Continue
 		}
-		# Unknown not checked-in situation
 		elseif ($ret_sign.message -ne 'OK') {
-			# use elseif to avoid skip when debug
-			if ($conf.display.console -or $debugging) {
-				Write-Host "[ERROR] [$ltuid] Unknown check-in error: $ret_sign"
-			}
+			Write-Log -Level 'ERROR' -Message "Unknown check-in error for ${ltuid}: $($ret_sign.message)"
 			Continue
 		}
-		# Get new info after checked-in
 		else {
-			$ret_info = Invoke-RestMethod -Method 'Get' -Uri $api_info_url -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
+			# Success - get updated info
+			$ret_info = Invoke-RestMethod -Method 'Get' -Uri $api_info_url -Headers $api_headers -ContentType 'application/json;charset=UTF-8' -UserAgent $Config.user_agent -WebSession $session
 		}
-		$ret_reward = Invoke-RestMethod -Method 'Get' -Uri $api_reward_url -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
-		if ($debugging) {
-			Write-Host '[DEBUG] Queried checkin info:' $ret_info 'data:' $ret_info.data
-			Write-Host '[DEBUG] Queried reward info:' $ret_reward 'data:' $ret_reward.data
-		}
+
+		# 5. Get Reward Info
+		$api_reward_url = "$base_url/event/$($game.game_id)/home?lang=$($Config.lang)&act_id=$act_id"
+		$ret_reward = Invoke-RestMethod -Method 'Get' -Uri $api_reward_url -Headers $api_headers -ContentType 'application/json;charset=UTF-8' -UserAgent $Config.user_agent -WebSession $session
 		if (($ret_info.retcode -eq -100) -or ($ret_reward.retcode -eq -100)) {
-			if ($conf.display.console -or $debugging) {
-				Write-Host "[ERROR] Invalid cookie format: $cookie"
-			}
-			if ($dc_webhook) {
-				$discord_embed[-1].description = Format-Text -Text $ret_reward.message
-			}
+			$Embed.description = Format-Text -Text $ret_reward.message
 			Continue
 		}
 
-		$current_reward = $ret_reward.data.awards[$ret_info.data.total_sign_day - 1] # Array start from 0
+		$current_reward = $ret_reward.data.awards[$ret_info.data.total_sign_day - 1]
 		$reward_name = Format-Text -Text $current_reward.name
-		if ($conf.display.console -or $debugging) {
-			Write-Host "[INFO] [$display_name] $reward_name x$($current_reward.cnt)"
+		Write-Log -Level 'INFO' -Message "[$display_name] $reward_name x$($current_reward.cnt)"
+
+		$Embed.color = '5635840' # Green (Success)
+		$reward_text = if ($Config.display.discord.text.minimal) {
+			"$($ret_info.data.today) ($($ret_info.data.total_sign_day))`n$reward_name x$($current_reward.cnt)"
 		}
-		if ($dc_webhook) {
-			$discord_embed[-1].color = '5635840'
-			$discord_embed[-1].fields += @{
-				'name'   = $game.name
-				'value'  = $(if ($conf.display.discord.text.minimal) {
-						"$($ret_info.data.today) ($($ret_info.data.total_sign_day))
-						$reward_name x$($current_reward.cnt)"
-					}
-					else { 
-						"$($ret_info.data.today)
-						**$($conf.display.discord.text.total_sign_day)**
-						$($ret_info.data.total_sign_day)$($conf.display.discord.text.total_sign_day_unit)
-						**$($conf.display.discord.text.reward)**
-						$reward_name x$($current_reward.cnt)"
-					}) 
-				'inline' = $true
-			}
+		else {
+			"$($ret_info.data.today)`n**$($Config.display.discord.text.total_sign_day)**`n$($ret_info.data.total_sign_day)$($Config.display.discord.text.total_sign_day_unit)`n**$($Config.display.discord.text.reward)**`n$reward_name x$($current_reward.cnt)"
 		}
+		$Embed.fields += @{ 'name' = $game.name; 'value' = $reward_text; 'inline' = $true }
+	}
+
+	return @{ NeedPing = $any_ping }
+}
+
+function Invoke-HoyolabResign {
+	param($BaseUrl, $GameId, $ActId, $Headers, $Jar, $Config)
+
+	$lang = $Config.lang
+	$user_agent = $Config.user_agent
+
+	$api_tasks_url = "$BaseUrl/event/$GameId/task/list?act_id=$ActId&lang=$lang"
+	$api_task_complete_url = "$BaseUrl/event/$GameId/task/complete"
+	$api_task_award_url = "$BaseUrl/event/$GameId/task/award"
+
+	$session = New-WebSession -Cookies $Jar -For $BaseUrl
+	$ret_tasks = Invoke-RestMethod -Method 'Get' -Uri $api_tasks_url -Headers $Headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
+
+	foreach ($task in $ret_tasks.data.list) {
+		if ($task.status -eq "TT_Award") { Continue }
+		$body = @{ "id" = $task.id; "lang" = $lang; "act_id" = $ActId } | ConvertTo-Json
+		Invoke-RestMethod -Method 'Post' -Uri $api_task_complete_url -Headers $Headers -Body $body -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
+		Invoke-RestMethod -Method 'Post' -Uri $api_task_award_url -Headers $Headers -Body $body -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
+	}
+
+	$api_resign_info_url = "$BaseUrl/event/$GameId/resign_info?act_id=$ActId&lang=$lang"
+	$ret_resign_info = Invoke-RestMethod -Method 'Get' -Uri $api_resign_info_url -Headers $Headers -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
+
+	if (($ret_resign_info.data.resign_cnt_monthly -lt $ret_resign_info.data.resign_limit_monthly) -and ($ret_resign_info.data.resign_cnt_daily -lt $ret_resign_info.data.resign_limit_daily)) {
+		$body = @{ "act_id" = $ActId; "lang" = $lang } | ConvertTo-Json
+		Invoke-RestMethod -Method 'Post' -Uri "$BaseUrl/event/$GameId/resign" -Headers $Headers -Body $body -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
 	}
 }
 
-if ($dc_webhook -and $discord_embed.Count) {
-	$discord_body = @{
-		'content' = ''
-		'embeds'  = $discord_embed
+####################
+# Main
+####################
+
+$conf = Get-Content .\sign.json -Raw -Encoding 'UTF8' | ConvertFrom-Json
+$global:debugging = $env:debug -eq 'pwsh-hoyolab-checkin'
+
+# Check Discord message reuse
+if ($conf.display.discord.webhook_url -and $conf.display.discord.reuse_msg -match '^(\d{18,})(len\d+)?$') {
+	$dc_reuse_id = $Matches.1
+	$ret = Invoke-RestMethod -Method 'Get' -Uri "$($conf.display.discord.webhook_url)/messages/$dc_reuse_id" -ContentType 'application/json;charset=UTF-8'
+	if ($ret.embeds.Length -ne $conf.cookies.Length) {
+		Write-Log -Level 'WARN' -Message 'Config has been changed (number of cookies). Will not re-use the previous message.'
+		$conf.display.discord.reuse_msg = "true"
 	}
-	if ($conf.display.discord.username) {
-		$discord_body.username = $conf.display.discord.username
-	}
-	if ($conf.display.discord.avatar_url) {
-		$discord_body.avatar_url = $conf.display.discord.avatar_url
-	}
-	$discord_body_json = $discord_body | ConvertTo-Json -Depth 10
-	if ($env:debug -eq 'pwsh-hoyolab-checkin.discord') {
-		Write-Host "[DEBUG] Discord message body:`n" $discord_body_json
-	}
-	if ($dc_reuse) {
-		if ($dc_reuse_id -match '^\d{18,}$') {
-			$ret_discord = Invoke-WebRequest -Method 'Patch' -Uri "$($conf.display.discord.webhook_url)/messages/$dc_reuse_id" -Body $discord_body_json -ContentType 'application/json;charset=UTF-8'
-		}
-		else {
-			$ret_discord = Invoke-RestMethod -Method 'Post' -Uri ($conf.display.discord.webhook_url + '?wait=true') -Body $discord_body_json -ContentType 'application/json;charset=UTF-8'
-			$conf.display.discord.reuse_msg = $ret_discord.id
-			$conf | ConvertTo-Json -Depth 10 | Set-Content .\sign.json -Encoding 'UTF8'
-		}
-	}
-	else {
-		$ret_discord = Invoke-RestMethod -Method 'Post' -Uri $conf.display.discord.webhook_url -Body $discord_body_json -ContentType 'application/json;charset=UTF-8'
-	}
-	if ($discord_need_ping) {
-		$discord_body.content = $discord_ping
-		$discord_body.embeds = $null
-		$discord_body_json = $discord_body | ConvertTo-Json -Depth 10
-		$ret_discord = Invoke-RestMethod -Method 'Post' -Uri $conf.display.discord.webhook_url -Body $discord_body_json -ContentType 'application/json;charset=UTF-8'
-	}
+}
+
+$discord_embeds = @()
+$any_need_ping = $false
+
+foreach ($cookie in $conf.cookies) {
+	$embed = Initialize-DiscordEmbed
+	$discord_embeds += $embed
+
+	$result = Invoke-HoyolabCheckin -Cookie $cookie -Config $conf -Embed $embed
+	if ($null -ne $result -and $result.NeedPing) { $any_need_ping = $true }
+}
+
+# Final Notifications
+if ($discord_embeds.Count) {
+	Send-DiscordNotification -Config $conf -Embeds $discord_embeds -NeedPing $any_need_ping -PingString (Get-DiscordPing -PingConfig $conf.display.discord.ping)
 }
 
 if ($conf.display.console -eq 'pause') {
-	Write-Host '[INFO] Press ENTER to continue ...'
+	Write-Log -Level 'INFO' -Message 'Press ENTER to continue ...'
 	Read-Host
 }
