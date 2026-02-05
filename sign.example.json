@@ -1,60 +1,109 @@
 {
-  "display": {
-    "console": "true",
-    "discord": {
-      "webhook_url": "",
-      "username": "",
-      "avatar_url": "",
-      "reuse_msg": false,
-      "text": {
-        "minimal": false,
-        "total_sign_day": "Total signed days",
-        "total_sign_day_unit": "",
-        "reward": "Obtained reward",
-        "need_captcha": "Captcha required. Please check-in manually."
-      },
-      "ping": {
-        "user": [],
-        "role": []
-      }
-    },
-    "account_info": {
-      "name": true,
-      "email": true,
-      "phone": false
-    }
-  },
-  "cookies": [
-    "mi18nLang=en-us; ltoken=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; ltuid=123456789;",
-    "mi18nLang=en-us; ltoken_v2=v2_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP; ltuid_v2=345678901; ltmid_v2=abcdefghijklm;"
-  ],
-  "lang": "en-us",
-  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-  "games": [
-    {
-      "name": "Genshin Impact",
-      "act_id": "e202102251931481",
-      "domain": "sg-hk4e-api.hoyolab.com",
-      "origin_url": "https://act.hoyolab.com/",
-      "referer_url": "https://act.hoyolab.com/",
-      "game_id": "sol"
-    },
-    {
-      "name": "Honkai: Star Rail",
-      "act_id": "e202303301540311",
-      "domain": "sg-public-api.hoyolab.com",
-      "origin_url": "https://act.hoyolab.com/",
-      "referer_url": "https://act.hoyolab.com/",
-      "game_id": "luna/os"
-    },
-    {
-      "name": "Zenless Zone Zero",
-      "act_id": "e202406031448091",
-      "domain": "sg-act-nap-api.hoyolab.com",
-      "origin_url": "https://act.hoyolab.com/",
-      "referer_url": "https://act.hoyolab.com/",
-      "game_id": "luna/zzz/os",
-      "custom_headers": { "x-rpc-signgame": "zzz" }
-    }
-  ]
+	"display": {
+		"console": "true",
+		"discord": {
+			"bots": [
+				{
+					"discord_name": "BOT1",
+					"webhook_url": "https://discord.com/api/webhooks/1418627585360406630/4g687d79f7396798126945415375913149594756164161161616161616161616",
+					"avatar_url": "https://cdn.discordapp.com/avatars/123456789012345678/123456789012345678.png",
+					"reuse_msg": false,
+					"minimal": false,
+					"profiles": [0, 1],
+					"ping": {
+						"user": [],
+						"role": []
+					}
+				},
+				{
+					"discord_name": "BOT2",
+					"webhook_url": "https://discord.com/api/webhooks/1418627585360406630/4g687d79f7396798126945415375913149594756164161161616161616161616",
+					"avatar_url": "https://cdn.discordapp.com/avatars/123456789012345678/123456789012345678.png",
+					"reuse_msg": false,
+					"minimal": false,
+					"profiles": ["ENDOMIN"],
+					"ping": {
+						"user": [],
+						"role": []
+					}
+				}
+			]
+		}
+	},
+	"profiles": [
+		{
+			"platform": "hoyolab",
+			"cookies": "mi18nLang=en-us; ltoken=cKhM62EsX3A5cyrNNLoBvafUQJTFN7xnhA1GEZNf; ltuid=106999666;"
+		},
+		{
+			"platform": "hoyolab",
+			"console_name": "USER2",
+			"cookies": "mi18nLang=en-us; ltoken_v2=v2_JAiZ2yokLnl8MBNkGZftiKNO1AAqmAeQeY1hmS4bg92wb0IdkpAB8sNMY30ZBvtxG0NjNzulXKRb-GEcAjgML2GGTLRy-PlETlw9IgYtSoMNOMdLQtQz81kkFgTVYcfxWSMAAA3ASEcO8gNFC0ncUCIJz0FGnNY3QOxWI1ZM0LQ6GUECT5MrJEApRE9gYp4CoCjs2PE55G.yM1su.MnZDTZiGQpMcG3; ltuid_v2=110666115; ltmid_v2=hg_6fuk18lovy;"
+		},
+		{
+			"platform": "skport",
+			"console_name": "ENDOMIN",
+			"cred": "9LfD2Tun65kpld4qlvDfDU91v0u0C3tk",
+			"skGameRole": "0_1243262698_9"
+		}
+	],
+	"platforms": {
+		"hoyolab": {
+			"lang": "en-us",
+			"user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+			"discord_text": {
+				"total_sign_day": "Total signed days",
+				"total_sign_day_unit": "",
+				"reward": "Obtained reward",
+				"need_captcha": "Captcha required. Please check-in manually."
+			},
+			"account_info": {
+				"name": true,
+				"email": true,
+				"phone": false
+			},
+			"games": [
+				{
+					"name": "Genshin Impact",
+					"domain": "sg-hk4e-api.hoyolab.com",
+					"origin_url": "https://act.hoyolab.com",
+					"referer_url": "https://act.hoyolab.com/",
+					"act_id": "e202102251931481",
+					"game_id": "sol"
+				},
+				{
+					"name": "Honkai: Star Rail",
+					"domain": "sg-public-api.hoyolab.com",
+					"origin_url": "https://act.hoyolab.com",
+					"referer_url": "https://act.hoyolab.com/",
+					"act_id": "e202303301540311",
+					"game_id": "luna/os"
+				},
+				{
+					"name": "Zenless Zone Zero",
+					"domain": "sg-act-nap-api.hoyolab.com",
+					"origin_url": "https://act.hoyolab.com",
+					"referer_url": "https://act.hoyolab.com/",
+					"act_id": "e202406031448091",
+					"game_id": "luna/zzz/os",
+					"custom_headers": { "x-rpc-signgame": "zzz" }
+				}
+			]
+		},
+		"skport": {
+			"lang": "en",
+			"user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0",
+			"games": [
+				{
+					"name": "Arknights: Endfield",
+					"api_base": "https://zonai.skport.com",
+					"origin_url": "https://game.skport.com",
+					"referer_url": "https://game.skport.com/",
+					"app_code": "endfield",
+					"platform": "3",
+					"vName": "1.0.0"
+				}
+			]
+		}
+	}
 }
