@@ -123,7 +123,7 @@ function Send-DiscordNotification {
 	$AllEmbeds = @()
 
 	# 1. Load Existing Embeds
-	if ($existing_message -and $existing_message.embeds) {
+	if ($existing_message -and $existing_message.embeds -and -not $BotConfig.overwrite) {
 		foreach ($ex_embed in $existing_message.embeds) {
 			# Create a field map for fast lookups/updates
 			$field_map = [ordered]@{}
@@ -764,7 +764,7 @@ foreach ($bot in $conf.display.discord.bots) {
 		$dc_reuse_id = $Matches.1
 		try {
 			$ret = Invoke-RestMethod -Method 'Get' -Uri "$($bot.webhook_url)/messages/$dc_reuse_id" -ContentType 'application/json;charset=UTF-8'
-			if ($ret.embeds.Length -ne $bot.profiles.Length) {
+			if (-not $bot.overwrite -and $ret.embeds.Length -ne $bot.profiles.Length) {
 				Out-Log -Level 'WARN' -Message "Config has been changed (number of profiles for $($bot.discord_name)). Will not re-use the previous message."
 				$bot.reuse_msg = "true"
 			}
