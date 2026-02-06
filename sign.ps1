@@ -305,7 +305,7 @@ function Invoke-HoyolabCheckin {
 	$Cookie = $Profiie.cookies
 	if (-not (Test-HoyolabCookie -CookieString $Cookie)) {
 		Out-Log -Level 'ERROR' -Message "Invalid cookie format: $Cookie"
-		return $null
+		return @{ NeedPing = $true }
 	}
 
 	$ltuid = if ($Cookie -match 'ltuid(_v2)?=(\d+)') { $Matches[2] } else { "Unknown" }
@@ -391,7 +391,7 @@ function Invoke-HoyolabCheckin {
 		}
 
 		# 3. Handle Resign
-		if ($ret_info.data.sign_cnt_missed -gt 0) {
+		if ($ret_info.data.sign_cnt_missed -gt 0 -and $ret_sign.retcode -ne -10002) {
 			Invoke-HoyolabResign -BaseUrl $base_url -GameId $game.game_id -ActId $act_id -Headers $api_headers -Jar $jar -Config $Config
 		}
 
@@ -460,8 +460,8 @@ function Invoke-HoyolabResign {
 	foreach ($task in $ret_tasks.data.list) {
 		if ($task.status -eq "TT_Award") { Continue }
 		$body = @{ "id" = $task.id; "lang" = $lang; "act_id" = $ActId } | ConvertTo-Json
-		Invoke-RestMethod -Method 'Post' -Uri $api_task_complete_url -Headers $Headers -Body $body -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
-		Invoke-RestMethod -Method 'Post' -Uri $api_task_award_url -Headers $Headers -Body $body -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
+		[void](Invoke-RestMethod -Method 'Post' -Uri $api_task_complete_url -Headers $Headers -Body $body -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session)
+		[void](Invoke-RestMethod -Method 'Post' -Uri $api_task_award_url -Headers $Headers -Body $body -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session)
 	}
 
 	$api_resign_info_url = "$BaseUrl/event/$GameId/resign_info?act_id=$ActId&lang=$lang"
@@ -469,7 +469,7 @@ function Invoke-HoyolabResign {
 
 	if (($ret_resign_info.data.resign_cnt_monthly -lt $ret_resign_info.data.resign_limit_monthly) -and ($ret_resign_info.data.resign_cnt_daily -lt $ret_resign_info.data.resign_limit_daily)) {
 		$body = @{ "act_id" = $ActId; "lang" = $lang } | ConvertTo-Json
-		Invoke-RestMethod -Method 'Post' -Uri "$BaseUrl/event/$GameId/resign" -Headers $Headers -Body $body -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session
+		[void](Invoke-RestMethod -Method 'Post' -Uri "$BaseUrl/event/$GameId/resign" -Headers $Headers -Body $body -ContentType 'application/json;charset=UTF-8' -UserAgent $user_agent -WebSession $session)
 	}
 }
 
@@ -834,6 +834,7 @@ for ($profile_idx = 0; $profile_idx -lt $conf.profiles.Length; $profile_idx++) {
 		'skport' { Invoke-SkportAttendance -Profiie $profiie -Config $p_conf -Embed $embed -IsReusing $is_reusing }
 		Default { Out-Log -Level 'ERROR' -Message "Unknown platform: $platform"; continue }
 	}
+	Out-Log -Level 'DEBUG' -Message "Attendance result:`n$($result | ConvertTo-Json -Depth 10)"
 
 	# Assign embed to matching bots
 	foreach ($bot_name in $bot_results.Keys) {
@@ -870,6 +871,7 @@ for ($profile_idx = 0; $profile_idx -lt $conf.profiles.Length; $profile_idx++) {
 foreach ($bot_name in $bot_results.Keys) {
 	$bot_data = $bot_results[$bot_name]
 	if ($bot_data.Embeds.Count) {
+		Out-Log -Level 'DEBUG' -Message "Sending notification:`n$($bot_data | ConvertTo-Json -Depth 10)"
 		Send-DiscordNotification -BotConfig $bot_data.BotConfig -Embeds $bot_data.Embeds -NeedPing $bot_data.AnyNeedPing -PingString (Get-DiscordPing -PingConfig $bot_data.BotConfig.ping) -GlobalConfig $conf
 	}
 }
