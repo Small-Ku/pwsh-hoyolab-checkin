@@ -57,7 +57,7 @@ function Out-Log {
 	}
 
 	if ($Level -eq 'DEBUG' -and -not $global:debugging) { return }
-	if ($null -ne $conf -and -not $conf.display.console) { return }
+	if ($null -ne $conf -and (($conf.display.console -eq 'false') -or (-not $conf.display.console))) { return }
 
 	Write-Host "[$Level] $Message" -ForegroundColor $color
 }
@@ -876,7 +876,7 @@ foreach ($bot_name in $bot_results.Keys) {
 	}
 }
 
-if ($conf.display.console -eq 'pause') {
+if ($conf.display.console -is [string] -and $conf.display.console -eq 'pause') {
 	Out-Log -Level 'INFO' -Message 'Press ENTER to continue ...'
 	Read-Host
 }
