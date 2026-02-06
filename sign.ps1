@@ -535,7 +535,7 @@ function Invoke-SkportRequest {
 
 	try {
 		$ret = Invoke-RestMethod @params
-		Out-Log -Level 'DEBUG' -Message "[skreq] ${Method} ${Uri}: $($ret | ConvertTo-Json -Depth 5)"
+		Out-Log -Level 'DEBUG' -Message "[skreq] ${Method} ${Uri}: $($ret | ConvertTo-Json -Depth 10)"
 		return $ret
 	}
 	catch {
