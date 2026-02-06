@@ -822,7 +822,7 @@ for ($profile_idx = 0; $profile_idx -lt $conf.profiles.Length; $profile_idx++) {
 		if ($matching) {
 			# Check if this bot is reusing messages
 			$reuse_id = $bot_config.reuse_msg
-			if ($reuse_id -and $reuse_id -match '^\d{18,}$') {
+			if ($reuse_id -and $reuse_id -match '^\d{18,}$' -and -not $bot_config.overwrite) {
 				$is_reusing = $true
 			}
 		}
