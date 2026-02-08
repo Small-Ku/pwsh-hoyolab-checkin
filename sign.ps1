@@ -236,7 +236,7 @@ function Send-DiscordNotification {
 
 	if ($reuse_id -and $reuse_id -match '^\d{18,}$') {
 		$uri = "$($BotConfig.webhook_url)/messages/$reuse_id"
-		$ret = Invoke-WebRequest -Method 'Patch' -Uri $uri -Body $discord_body_json -ContentType 'application/json;charset=UTF-8'
+		$ret = Invoke-RestMethod -Method 'Patch' -Uri $uri -Body $discord_body_json -ContentType 'application/json;charset=UTF-8'
 	}
 	else {
 		$uri = $BotConfig.webhook_url + '?wait=true'
