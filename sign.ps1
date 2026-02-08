@@ -501,24 +501,23 @@ function Invoke-SkportRequest {
 
 	$Uri = "$($Ctx.GameConfig.api_base)$Path"
 	$currTs = ([DateTimeOffset]::Now.ToUnixTimeSeconds() + $Ctx.TimeOffset).ToString()
-	$headers = [ordered]@{
-		'User-Agent'      = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0'
+	$headers = @{
 		'Accept'          = '*/*'
 		'Accept-Language' = 'en-US,en;q=0.9'
-		'Accept-Encoding' = 'gzip, deflate, br, zstd'
 		'Referer'         = $Ctx.GameConfig.referer_url
 		'Content-Type'    = 'application/json'
 		'sk-language'     = $Ctx.Config.lang
-		'sk-game-role'    = $Ctx.SkGameRole
 		'cred'            = $Ctx.Cred
 		'platform'        = $Ctx.GameConfig.platform
 		'vName'           = $Ctx.GameConfig.vName
 		'timestamp'       = $currTs
 		'Origin'          = $Ctx.GameConfig.origin_url
-		'Connection'      = 'keep-alive'
 		'Sec-Fetch-Dest'  = 'empty'
 		'Sec-Fetch-Mode'  = 'cors'
 		'Sec-Fetch-Site'  = 'same-site'
+	}
+	if ($Ctx.SkGameRole) {
+		$headers['sk-game-role'] = $Ctx.SkGameRole
 	}
 	if ($Ctx.Token -and $Path) {
 		$headers['sign'] = Get-SkportSignature -Path $Path -Body $Body -Timestamp $currTs -Token $Ctx.Token -Platform $Ctx.GameConfig.platform -VName $Ctx.GameConfig.vName
@@ -528,10 +527,11 @@ function Invoke-SkportRequest {
 		Method      = $Method
 		Uri         = $Uri
 		Headers     = $headers
+		UserAgent   = $Ctx.Config.user_agent
 		ContentType = 'application/json'
 		ErrorAction = 'Stop'
 	}
-	if ($null -ne $Body) { $params.Body = $Body }
+	if ($Method -ne 'Get' -or ($null -ne $Body -and $Body -ne "")) { $params.Body = $Body }
 
 	try {
 		$ret = Invoke-RestMethod @params
@@ -622,8 +622,8 @@ function Find-SkportRoles {
 						gameId     = $binding.gameId
 						roleId     = $role.roleId
 						serverId   = $role.serverId
-						nickname   = $role.nickname
-						serverName = $role.serverName
+						nickname   = Format-Text -Text $role.nickname
+						serverName = Format-Text -Text $role.serverName
 					}
 				}
 			}
@@ -664,7 +664,7 @@ function Invoke-SkportAttendance {
 
 	# 1. Refresh Token
 	if (-not (New-SkportToken -Ctx $ctx)) {
-		$Embed.fields += @{ 'name' = "Skport"; 'value' = "❌ Failed to get token"; 'inline' = $true }
+		$Embed.fields += @{ 'name' = "Skport"; 'value' = "Failed to get token"; 'inline' = $true }
 		return @{ NeedPing = $true }
 	}
 	
@@ -681,7 +681,7 @@ function Invoke-SkportAttendance {
 	$roles = Find-SkportRoles -BindingData $bindingData
 	if ($roles.Count -eq 0) {
 		Out-Log -Level 'WARN' -Message "No bound roles found for Skport user."
-		$Embed.fields += @{ 'name' = "Skport"; 'value' = "⚠️ No bound roles found"; 'inline' = $true }
+		$Embed.fields += @{ 'name' = "Skport"; 'value' = "No bound roles found"; 'inline' = $true }
 		return $null
 	}
 
@@ -733,7 +733,7 @@ function Invoke-SkportAttendance {
 
 		$awards = Find-SkportAwards -Ctx $roleCtx -AttendanceData $data
 		$Embed.color = '5635840' # Green
-		$award_text = ($awards | ForEach-Object { "$($_.name) x$($_.count)" }) -join "`n"
+		$award_text = ($awards | ForEach-Object { "$(Format-Text -Text $_.name) x$($_.count)" }) -join "`n"
 
 		if ($is_already_checked_in) {
 			Out-Log -Level 'INFO' -Message "[$display_name] Already checked in. Awards: $award_text"
