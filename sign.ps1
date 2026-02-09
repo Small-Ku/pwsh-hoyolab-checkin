@@ -159,7 +159,17 @@ function Send-DiscordNotification {
 			}
 		}
 
-		# Priority 2: Title (Fallback for legacy or first run)
+		# Priority 2: Description
+		if ($new_e.description) {
+			foreach ($ex in $AllEmbeds) {
+				if ($ex.description -eq $new_e.description) {
+					$target_embed = $ex
+					break
+				}
+			}
+		}
+
+		# Priority 3: Title (Fallback for legacy or first run)
 		if ($null -eq $target_embed) {
 			foreach ($ex in $AllEmbeds) {
 				if (-not $ex['_matched'] -and $ex.title -eq $new_e.title) {
@@ -174,7 +184,7 @@ function Send-DiscordNotification {
 			$target_embed['title'] = $new_e.title
 			$target_embed['color'] = $new_e.color
 			$target_embed['description'] = $new_e.description
-			$target_embed['footer'] = $new_e.footer # Ensure footer is saved/updated
+			$target_embed['footer'] = $new_e.footer
 			$target_embed['_matched'] = $true
 		}
 		else {
@@ -311,7 +321,7 @@ function Invoke-HoyolabCheckin {
 	$ltuid = if ($Cookie -match 'ltuid(_v2)?=(\d+)') { $Matches[2] } else { "Unknown" }
 	$display_name = $ltuid -replace '^(\d{2})\d+(\d{2})$', '$1****$2'
 	$Embed.title = $display_name -replace '\*', '\*'
-	if ($ltuid -ne "Unknown") { $Embed.footer = @{ 'text' = "ID: $ltuid" } }
+	if ($ltuid -ne "Unknown") { $Embed.description = "ID: ||$ltuid||" }
 
 	# Parse cookies into jar
 	$jar = @{}
@@ -328,10 +338,9 @@ function Invoke-HoyolabCheckin {
 	if ($ac_info.Success -and $ac_info.DisplayName) {
 		$display_name = $ac_info.DisplayName
 		$Embed.title = $display_name -replace '\*', '\*'
-		$Embed.description = ""
 	}
 	elseif (-not $ac_info.Success) {
-		$Embed.description = $ac_info.Message
+		$Embed.fields += @{ 'name' = 'Account'; 'value' = $ac_info.Message }
 		Out-Log -Level 'ERROR' -Message "Failed to get account info for ${ltuid}: $($ac_info.Message)"
 		if ($ac_info.Message -match "login" -or $ac_info.Message -match "cookie") {
 			return @{ NeedPing = $true }
@@ -426,7 +435,7 @@ function Invoke-HoyolabCheckin {
 		$api_reward_url = "$base_url/event/$($game.game_id)/home?lang=$($Config.lang)&act_id=$act_id"
 		$ret_reward = Invoke-RestMethod -Method 'Get' -Uri $api_reward_url -Headers $api_headers -ContentType 'application/json;charset=UTF-8' -UserAgent $Config.user_agent -WebSession $session
 		if (($ret_info.retcode -eq -100) -or ($ret_reward.retcode -eq -100)) {
-			$Embed.description = Format-Text -Text $ret_reward.message
+			$Embed.fields += @{ 'name' = $game.name; 'value' = Format-Text -Text $ret_reward.message }
 			Continue
 		}
 
@@ -674,7 +683,7 @@ function Invoke-SkportAttendance {
 	$userId = Find-SkportUserId -UserData $userData
 	$Embed.title = if ($nickname) { $nickname } else { "Unknown Skport User" }
 	$Embed.description = ""
-	if ($null -ne $userId) { $Embed.footer = @{ 'text' = "ID: $userId" } }
+	if ($null -ne $userId) { $Embed.description = "ID: ||$userId||" }
 
 	# 3. Get All Roles
 	$bindingData = Get-SkportBinding -Ctx $ctx
