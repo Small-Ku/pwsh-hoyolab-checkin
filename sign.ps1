@@ -277,31 +277,30 @@ function Test-HoyolabCookie {
 	}
 }
 
-# TODO: custom base api url and origin/referer url
 function Get-HoyolabAccountInfo {
-	param($Cookies, $UserAgent, $Config)
+	param($Cookies, $Config)
 
-	$session = New-WebSession -Cookies $Cookies -For 'https://api-account-os.hoyolab.com'
+	$session = New-WebSession -Cookies $Cookies -For $Config.account.api_base
 	$headers = @{
 		'Accept'          = 'application/json, text/plain, */*'
 		'Accept-Language' = 'en-US,en;q=0.9'
-		'Origin'          = 'https://act.hoyolab.com'
-		'Referer'         = 'https://act.hoyolab.com/'
+		'Origin'          = $Config.account.origin_url
+		'Referer'         = $Config.account.referer_url
 		'Sec-Fetch-Site'  = 'same-site'
 		'Sec-Fetch-Mode'  = 'cors'
 		'Sec-Fetch-Dest'  = 'empty'
 	}
-	$uri = 'https://api-account-os.hoyolab.com/auth/api/getUserAccountInfoByLToken'
-	$ret = Invoke-RestMethod -Method 'Get' -Uri $uri -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $UserAgent -WebSession $session
+	$uri = $Config.account.api_base + '/auth/api/getUserAccountInfoByLToken'
+	$ret = Invoke-RestMethod -Method 'Get' -Uri $uri -Headers $headers -ContentType 'application/json;charset=UTF-8' -UserAgent $Config.user_agent -WebSession $session
 
 	Out-Log -Level 'DEBUG' -Message "Account info: $ret data: $($ret.data)"
 
 	if ($ret.retcode -eq 0) {
 		$display_name = ''
-		if ($Config.account_info.name -and $ret.data.account_name) { $display_name = $ret.data.account_name }
-		elseif ($Config.account_info.email -and $ret.data.email) { $display_name = $ret.data.email }
-		elseif ($Config.account_info.id -and $ret.data.account_id) { $display_name = $ret.data.account_id }
-		elseif ($Config.account_info.phone -and $ret.data.mobile) { $display_name = $ret.data.mobile }
+		if ($Config.account.info_display.name -and $ret.data.account_name) { $display_name = $ret.data.account_name }
+		elseif ($Config.account.info_display.email -and $ret.data.email) { $display_name = $ret.data.email }
+		elseif ($Config.account.info_display.id -and $ret.data.account_id) { $display_name = $ret.data.account_id }
+		elseif ($Config.account.info_display.phone -and $ret.data.mobile) { $display_name = $ret.data.mobile }
 
 		return @{ Success = $true; DisplayName = $display_name }
 	}
@@ -334,7 +333,7 @@ function Invoke-HoyolabCheckin {
 	}
 
 	# Get detailed account info
-	$ac_info = Get-HoyolabAccountInfo -Cookies $jar -UserAgent $Config.user_agent -Config $Config
+	$ac_info = Get-HoyolabAccountInfo -Cookies $jar -Config $Config
 	if ($ac_info.Success -and $ac_info.DisplayName) {
 		$display_name = $ac_info.DisplayName
 		$Embed.title = $display_name -replace '\*', '\*'
@@ -352,7 +351,7 @@ function Invoke-HoyolabCheckin {
 		Out-Log -Level 'DEBUG' -Message "Signing for: $($game.name)"
 
 		$act_id = $game.act_id
-		$base_url = 'https://' + $game.domain # TODO: move to base api url like skport
+		$base_url = $game.api_base
 		$api_headers = @{
 			'Accept'            = 'application/json, text/plain, */*'
 			'Accept-Encoding'   = 'gzip, deflate, br'

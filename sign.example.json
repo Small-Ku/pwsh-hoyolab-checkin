@@ -56,15 +56,20 @@
 				"reward": "Obtained reward",
 				"need_captcha": "Captcha required. Please check-in manually."
 			},
-			"account_info": {
-				"name": true,
-				"email": true,
-				"phone": false
+			"account": {
+				"api_base": "https://api-account-os.hoyolab.com",
+				"origin_url": "https://act.hoyolab.com",
+				"referer_url": "https://act.hoyolab.com/",
+				"info_display": {
+					"name": true,
+					"email": true,
+					"phone": false
+				}
 			},
 			"games": [
 				{
 					"name": "Genshin Impact",
-					"domain": "sg-hk4e-api.hoyolab.com",
+					"api_base": "https://sg-hk4e-api.hoyolab.com",
 					"origin_url": "https://act.hoyolab.com",
 					"referer_url": "https://act.hoyolab.com/",
 					"act_id": "e202102251931481",
@@ -72,7 +77,7 @@
 				},
 				{
 					"name": "Honkai: Star Rail",
-					"domain": "sg-public-api.hoyolab.com",
+					"api_base": "https://sg-public-api.hoyolab.com",
 					"origin_url": "https://act.hoyolab.com",
 					"referer_url": "https://act.hoyolab.com/",
 					"act_id": "e202303301540311",
@@ -80,7 +85,7 @@
 				},
 				{
 					"name": "Zenless Zone Zero",
-					"domain": "sg-act-nap-api.hoyolab.com",
+					"api_base": "https://sg-act-nap-api.hoyolab.com",
 					"origin_url": "https://act.hoyolab.com",
 					"referer_url": "https://act.hoyolab.com/",
 					"act_id": "e202406031448091",
